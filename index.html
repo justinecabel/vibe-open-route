@@ -4,15 +4,37 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Open Route | Philippines Jeepney Crowdsourced Map</title>
-  <meta name="description" content="A collaborative community map for Jeepney and Bus routes in the Philippines. Plan your commute with real-time AI guidance and placards.">
-  <meta name="keywords" content="Jeepney, Philippines, Commute, Manila, Public Transport, Crowdsourced Map">
+  <title>Open Route | Philippines Jeepney Route Helper & Commuter Guide</title>
   
-  <!-- Open Graph / Facebook -->
+  <!-- SEO Meta Tags -->
+  <meta name="description" content="Find the best Jeepney routes in the Philippines. A crowdsourced commuter guide with AI route analysis, digital placards, and road-snapped maps.">
+  <meta name="keywords" content="Philippines Jeepney routes, Jeepney route helper, Manila commute guide, crowdsourced transit map, commute Philippines, jeepney map manila">
+  <meta name="author" content="Open Route Community">
+  <link rel="canonical" href="https://open-route.ph" />
+
+  <!-- Open Graph / Social Media -->
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Open Route | Philippines Jeepney Guide">
-  <meta property="og:description" content="Map your own routes, see digital placards, and navigate the Philippines like a pro.">
-  <meta property="og:image" content="https://images.unsplash.com/photo-1518107616385-ad30221e29b9?q=80&w=1000&auto=format&fit=crop">
+  <meta property="og:title" content="Open Route | Philippines Jeepney Route Helper">
+  <meta property="og:description" content="Navigate the Philippines with our crowdsourced Jeepney map and AI-powered commuter guide.">
+  <meta property="og:url" content="https://open-route.ph">
+  <meta property="og:image" content="https://images.unsplash.com/photo-1518107616385-ad30221e29b9?q=80&w=1200&auto=format&fit=crop">
+
+  <!-- JSON-LD Structured Data for SEO -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Open Route Jeepney Helper",
+    "operatingSystem": "Web",
+    "applicationCategory": "TravelApplication",
+    "description": "A crowdsourced platform to map and view Jeepney routes in the Philippines.",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "PHP"
+    }
+  }
+  </script>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
@@ -26,7 +48,7 @@
     .scrollbar-hide::-webkit-scrollbar { display: none; }
     
     /* Digital Placard Font Simulation */
-    .font-placard { font-family: "Impact", "Arial Black", sans-serif; letter-spacing: -0.05em; }
+    .font-placard { font-family: "Impact", "Arial Black", "Arial Bold", sans-serif; letter-spacing: -0.02em; }
 
     /* UI Transitions */
     .sidebar-transition { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }

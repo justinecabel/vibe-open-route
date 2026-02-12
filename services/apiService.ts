@@ -1,12 +1,16 @@
-
 import { JeepneyRoute, GeminiAnalysis } from '../types';
+import { ENV } from '../env';
 
-const API_BASE = 'https://0770-136-158-59-224.ngrok-free.app/api';
-const LOCAL_CACHE_KEY = 'open_route_store_v1';
+const API_BASE = ENV.BACKEND_API;
+const LOCAL_CACHE_KEY = 'open_route_store_v2';
 
 const getLocalData = (): JeepneyRoute[] => {
-  const data = localStorage.getItem(LOCAL_CACHE_KEY);
-  return data ? JSON.parse(data) : [];
+  try {
+    const data = localStorage.getItem(LOCAL_CACHE_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
 };
 
 const saveLocalData = (routes: JeepneyRoute[]) => {
@@ -16,22 +20,13 @@ const saveLocalData = (routes: JeepneyRoute[]) => {
 export const apiService = {
   async getRoutes(): Promise<JeepneyRoute[]> {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
-      const res = await fetch(`${API_BASE}/routes`, { 
-        signal: controller.signal,
-        headers: { 'ngrok-skip-browser-warning': 'true' }
-      });
-      clearTimeout(timeoutId);
-      
-      if (!res.ok) throw new Error('API Error');
+      const res = await fetch(`${API_BASE}/routes`);
+      if (!res.ok) throw new Error('API unreachable');
       const data = await res.json();
-      
       saveLocalData(data);
       return data;
     } catch (error) {
-      console.warn("API Unreachable, using local cache.", error);
+      console.warn("Backend unavailable, using local cache.");
       return getLocalData();
     }
   },
@@ -39,21 +34,16 @@ export const apiService = {
   async saveRoute(route: JeepneyRoute): Promise<JeepneyRoute> {
     const localRoutes = getLocalData();
     const pendingRoute = { ...route, syncStatus: 'pending' as const };
-    
     saveLocalData([...localRoutes.filter(r => r.id !== route.id), pendingRoute]);
 
     try {
       const res = await fetch(`${API_BASE}/routes`, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(route)
       });
       if (!res.ok) throw new Error('Sync failed');
       const synced = { ...(await res.json()), syncStatus: 'synced' as const };
-      
       saveLocalData([...getLocalData().filter(r => r.id !== synced.id), synced]);
       return synced;
     } catch (error) {
@@ -65,20 +55,10 @@ export const apiService = {
     try {
       const res = await fetch(`${API_BASE}/routes/${id}/vote`, {
         method: 'PATCH',
-        headers: { 
-          'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ delta })
       });
-      const updated = await res.json();
-      const cache = getLocalData();
-      const idx = cache.findIndex(r => r.id === id);
-      if (idx > -1) {
-        cache[idx] = updated;
-        saveLocalData(cache);
-      }
-      return updated;
+      return await res.json();
     } catch (error) {
       const cache = getLocalData();
       const idx = cache.findIndex(r => r.id === id);
@@ -95,15 +75,12 @@ export const apiService = {
     try {
       const res = await fetch(`${API_BASE}/analyze`, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ routeName })
       });
       return await res.json();
     } catch (e) {
-      return { guide: "Guide unavailable offline.", landmarks: [], tips: [] };
+      return { guide: "Commuter guide unavailable offline.", landmarks: [], tips: [] };
     }
   }
 };

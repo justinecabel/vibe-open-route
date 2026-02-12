@@ -129,12 +129,13 @@ const App: React.FC = () => {
     // Dismiss active route details when clicking elsewhere on the map
     setActiveRoute(null);
     setFocusedPoint(point);
+    // Auto-open sidebar on mobile for better SEO/discoverability of matching routes
     if (window.innerWidth < 1024) setIsSidebarOpen(true);
   };
 
   const filteredRoutes = useMemo(() => {
     if (!focusedPoint) return routes;
-    const threshold = 120;
+    const threshold = 120; // 120 meters filter
     return routes.filter(route => 
       route.path.some(coord => getDistance(focusedPoint, coord) < threshold)
     );
@@ -173,20 +174,20 @@ const App: React.FC = () => {
           focusedPoint={focusedPoint} userLocation={userLocation}
         />
 
-        {/* Route Info Popup - Compact & Overlap Fixed */}
+        {/* Route Info Popup - Compact & SEO Friendly */}
         {activeRoute && !isAddingRoute && (
           <div className="absolute top-3 left-3 right-3 sm:left-auto sm:right-3 sm:w-80 z-[2002] bg-white/95 backdrop-blur-md rounded-3xl shadow-2xl border border-white/50 overflow-hidden max-h-[85vh] flex flex-col animate-in slide-in-from-top-2 duration-300">
             <header className="p-3 bg-indigo-950 text-white flex items-center gap-3">
               <button 
                 onClick={() => setActiveRoute(null)} 
                 className="p-1.5 bg-white/10 hover:bg-white/20 rounded-xl transition-all flex-shrink-0"
-                title="Deselect Route"
+                aria-label="Close route info"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
               <div className="flex-1 truncate">
-                <h2 className="font-black text-[13px] uppercase italic truncate">{activeRoute.name}</h2>
-                <p className="text-[9px] font-bold text-yellow-400 uppercase tracking-widest truncate">By {activeRoute.author}</p>
+                <h2 className="font-placard text-[14px] uppercase italic truncate">{activeRoute.name}</h2>
+                <p className="text-[9px] font-bold text-yellow-400 uppercase tracking-widest truncate opacity-80">Posted by {activeRoute.author}</p>
               </div>
             </header>
             
@@ -219,25 +220,25 @@ const App: React.FC = () => {
               {!analysis && !isAnalyzing ? (
                 <button 
                   onClick={handleAnalyze}
-                  className="w-full bg-indigo-600 text-white font-black py-2.5 rounded-xl text-[9px] uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
+                  className="w-full bg-indigo-600 text-white font-black py-2.5 rounded-xl text-[10px] uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                  Get AI Route Guide
+                  Get Route Intel (AI)
                 </button>
               ) : isAnalyzing ? (
                 <div className="flex flex-col items-center py-2 space-y-1 animate-pulse">
                   <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                  <p className="text-[8px] font-black text-indigo-900/50 uppercase">Analysis in progress...</p>
+                  <p className="text-[8px] font-black text-indigo-900/50 uppercase">Checking landmarks...</p>
                 </div>
               ) : analysis && (
                 <div className="space-y-2 animate-in fade-in slide-in-from-bottom-1">
-                  <div className="p-2.5 bg-indigo-50/50 rounded-xl border border-indigo-100">
+                  <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100">
                     <p className="text-[11px] text-indigo-950 leading-tight font-medium">"{analysis.guide}"</p>
                   </div>
                   {analysis.landmarks.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                       {analysis.landmarks.slice(0, 3).map((l, i) => (
-                        <span key={i} className="px-1.5 py-0.5 bg-white text-indigo-800 text-[8px] font-bold rounded-md border border-indigo-100">{l}</span>
+                        <span key={i} className="px-1.5 py-0.5 bg-white text-indigo-800 text-[8px] font-bold rounded-md border border-indigo-100 uppercase tracking-tighter">{l}</span>
                       ))}
                     </div>
                   )}
@@ -255,7 +256,7 @@ const App: React.FC = () => {
                   setActiveRoute(null); 
                   setFocusedPoint(null);
                 }}
-                className="w-full bg-slate-100 text-indigo-900 font-black py-2.5 rounded-xl text-[9px] uppercase tracking-widest border border-indigo-100/50 hover:bg-slate-200"
+                className="w-full bg-slate-100 text-indigo-950 font-black py-2.5 rounded-xl text-[9px] uppercase tracking-widest border border-indigo-100/50 hover:bg-slate-200"
               >
                 Refine Path
               </button>
@@ -263,7 +264,7 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Improved Route Publisher - Compact & No Overflow */}
+        {/* Route Drawing/Editing UI - Compact and Non-overflowing */}
         {isAddingRoute && (
           <>
             <div className="absolute top-3 left-3 right-3 sm:left-auto sm:right-3 sm:w-72 z-[1000] bg-white rounded-2xl shadow-xl p-3 border border-slate-200 animate-in fade-in duration-200">
@@ -271,13 +272,13 @@ const App: React.FC = () => {
                 <div className="w-6 h-6 bg-indigo-950 text-yellow-400 rounded-lg flex items-center justify-center">
                    <JeepneyIcon className="w-3 h-3" />
                 </div>
-                <h2 className="text-[11px] font-black text-indigo-950 uppercase">{editingId ? 'Refine Path' : 'Add Route'}</h2>
+                <h2 className="text-[11px] font-black text-indigo-950 uppercase tracking-wider">{editingId ? 'Refine Path' : 'Map New Route'}</h2>
               </div>
               <div className="space-y-2">
                 <input 
                   value={newRouteName} 
                   onChange={e => setNewRouteName(e.target.value)} 
-                  placeholder="Route Name (e.g. Baclaran - Pasay)" 
+                  placeholder="Route (e.g. PITX - Monumento)" 
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-[10px] font-bold text-indigo-950 outline-none focus:border-indigo-600"
                 />
                 <input 
@@ -289,11 +290,10 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Bottom Controls - Flex row for buttons to prevent overflow */}
             <div className="absolute bottom-3 left-3 right-3 sm:left-auto sm:right-3 sm:w-72 z-[1000] flex flex-col gap-2">
               <div className="bg-indigo-950 text-white p-2 rounded-xl flex justify-between items-center shadow-lg border border-indigo-800">
                 <p className="text-[9px] font-black uppercase tracking-widest text-indigo-300 ml-1">
-                  <span className="text-yellow-400">{newRouteWaypoints.length}</span> Waypoints
+                  <span className="text-yellow-400">{newRouteWaypoints.length}</span> Points
                 </p>
                 <button 
                   onClick={() => setNewRouteWaypoints(p => p.slice(0, -1))} 
@@ -315,7 +315,7 @@ const App: React.FC = () => {
                   disabled={isSnapping || newRouteWaypoints.length < 2 || !newRouteName || !newAuthor} 
                   className="flex-[2] bg-indigo-600 text-white font-black py-3 rounded-lg text-[10px] uppercase tracking-widest shadow-lg disabled:opacity-50 active:scale-95 flex items-center justify-center gap-2"
                 >
-                  {isSnapping ? 'Smoothing...' : 'Publish'}
+                  {isSnapping ? 'Snapping...' : 'Publish'}
                   {!isSnapping && <JeepneyIcon className="w-3.5 h-3.5" />}
                 </button>
               </div>
