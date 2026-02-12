@@ -4,6 +4,18 @@ import { ENV } from '../env';
 const API_BASE = ENV.BACKEND_API;
 const LOCAL_CACHE_KEY = 'open_route_store_v2';
 
+/**
+ * Common headers for all API requests.
+ * Includes ngrok-skip-browser-warning to bypass the landing page on ngrok tunnels.
+ */
+const getHeaders = (extraHeaders: Record<string, string> = {}) => {
+  return {
+    'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': 'true', 
+    ...extraHeaders,
+  };
+};
+
 const getLocalData = (): JeepneyRoute[] => {
   try {
     const data = localStorage.getItem(LOCAL_CACHE_KEY);
@@ -20,13 +32,17 @@ const saveLocalData = (routes: JeepneyRoute[]) => {
 export const apiService = {
   async getRoutes(): Promise<JeepneyRoute[]> {
     try {
-      const res = await fetch(`${API_BASE}/routes`);
-      if (!res.ok) throw new Error('API unreachable');
+      const res = await fetch(`${API_BASE}/routes`, {
+        method: 'GET',
+        headers: getHeaders(),
+        mode: 'cors'
+      });
+      if (!res.ok) throw new Error(`API unreachable: ${res.status}`);
       const data = await res.json();
       saveLocalData(data);
       return data;
     } catch (error) {
-      console.warn("Backend unavailable, using local cache.");
+      console.warn("Backend unavailable or CORS error, using local cache.", error);
       return getLocalData();
     }
   },
@@ -39,14 +55,16 @@ export const apiService = {
     try {
       const res = await fetch(`${API_BASE}/routes`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(route)
+        headers: getHeaders(),
+        body: JSON.stringify(route),
+        mode: 'cors'
       });
-      if (!res.ok) throw new Error('Sync failed');
+      if (!res.ok) throw new Error(`Sync failed: ${res.status}`);
       const synced = { ...(await res.json()), syncStatus: 'synced' as const };
       saveLocalData([...getLocalData().filter(r => r.id !== synced.id), synced]);
       return synced;
     } catch (error) {
+      console.error("Failed to save route to backend:", error);
       return pendingRoute;
     }
   },
@@ -55,9 +73,11 @@ export const apiService = {
     try {
       const res = await fetch(`${API_BASE}/routes/${id}/vote`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ delta })
+        headers: getHeaders(),
+        body: JSON.stringify({ delta }),
+        mode: 'cors'
       });
+      if (!res.ok) throw new Error(`Vote failed: ${res.status}`);
       return await res.json();
     } catch (error) {
       const cache = getLocalData();
@@ -75,12 +95,15 @@ export const apiService = {
     try {
       const res = await fetch(`${API_BASE}/analyze`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ routeName })
+        headers: getHeaders(),
+        body: JSON.stringify({ routeName }),
+        mode: 'cors'
       });
+      if (!res.ok) throw new Error(`Analysis failed: ${res.status}`);
       return await res.json();
     } catch (e) {
-      return { guide: "Commuter guide unavailable offline.", landmarks: [], tips: [] };
+      console.error("AI Analysis error:", e);
+      return { guide: "Commuter guide unavailable. Please check your connection to the backend.", landmarks: [], tips: [] };
     }
   }
 };
