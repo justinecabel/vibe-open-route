@@ -42,7 +42,6 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [focusedPoint, setFocusedPoint] = useState<Waypoint | null>(null);
   
-  // Track votes locally for better UX feedback
   const [votedIds, setVotedIds] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -76,14 +75,20 @@ const App: React.FC = () => {
   }, [newRouteWaypoints, isAddingRoute]);
 
   useEffect(() => {
-    if (activeRoute) {
-      setIsAnalyzing(true);
-      setAnalysis(null);
-      apiService.analyzeRoute(activeRoute.name)
-        .then(setAnalysis)
-        .finally(() => setIsAnalyzing(false));
-    }
+    setAnalysis(null);
+    setIsAnalyzing(false);
   }, [activeRoute?.id]);
+
+  const handleAnalyze = async () => {
+    if (!activeRoute) return;
+    setIsAnalyzing(true);
+    try {
+      const result = await apiService.analyzeRoute(activeRoute.name);
+      setAnalysis(result);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!newRouteName || !newAuthor || newRouteWaypoints.length < 2) return;
@@ -121,29 +126,30 @@ const App: React.FC = () => {
 
   const handleMapClick = (point: Waypoint) => {
     if (isAddingRoute) return;
+    // Dismiss active route details when clicking elsewhere on the map
+    setActiveRoute(null);
     setFocusedPoint(point);
-    // On mobile, if map is clicked, open sidebar to show results
     if (window.innerWidth < 1024) setIsSidebarOpen(true);
   };
 
   const filteredRoutes = useMemo(() => {
     if (!focusedPoint) return routes;
-    const threshold = 120; // meters for street proximity
+    const threshold = 120;
     return routes.filter(route => 
       route.path.some(coord => getDistance(focusedPoint, coord) < threshold)
     );
   }, [routes, focusedPoint]);
 
   return (
-    <div className="flex h-screen w-full font-sans bg-slate-50 overflow-hidden relative text-indigo-950">
+    <div className="flex h-screen w-full font-sans bg-slate-50 overflow-hidden relative text-indigo-950 text-sm">
       <RouteSidebar 
         routes={filteredRoutes} 
         totalRoutesCount={routes.length}
         activeRoute={activeRoute} 
-        onSelectRoute={setActiveRoute}
+        onSelectRoute={(r) => { setActiveRoute(r); if(window.innerWidth < 1024) setIsSidebarOpen(false); }}
         onAddRouteClick={() => { 
           setIsAddingRoute(true); 
-          setIsSidebarOpen(false); // Auto-hide sidebar on mobile
+          setIsSidebarOpen(false);
           setActiveRoute(null); 
           setEditingId(null); 
           setNewRouteName(''); 
@@ -167,65 +173,71 @@ const App: React.FC = () => {
           focusedPoint={focusedPoint} userLocation={userLocation}
         />
 
-        {/* Route Info Popup */}
+        {/* Route Info Popup - Compact & Overlap Fixed */}
         {activeRoute && !isAddingRoute && (
-          <div className="absolute top-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-85 z-[1000] bg-white/95 backdrop-blur-md rounded-[2rem] shadow-2xl border border-white/50 overflow-hidden max-h-[75vh] flex flex-col animate-in slide-in-from-top-4 duration-300">
-            <header className="p-5 bg-indigo-950 text-white flex justify-between items-start">
-              <div className="pr-4 flex-1 overflow-hidden">
-                <h2 className="font-black text-lg leading-tight uppercase italic truncate">{activeRoute.name}</h2>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-[9px] font-black text-yellow-400 uppercase tracking-widest truncate">By {activeRoute.author}</span>
-                  <div className="h-1 w-1 bg-white/30 rounded-full" />
-                  <span className="text-[10px] font-black text-indigo-300">Score: {activeRoute.score}</span>
-                </div>
-              </div>
-              <button onClick={() => setActiveRoute(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors flex-shrink-0">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"/></svg>
+          <div className="absolute top-3 left-3 right-3 sm:left-auto sm:right-3 sm:w-80 z-[2002] bg-white/95 backdrop-blur-md rounded-3xl shadow-2xl border border-white/50 overflow-hidden max-h-[85vh] flex flex-col animate-in slide-in-from-top-2 duration-300">
+            <header className="p-3 bg-indigo-950 text-white flex items-center gap-3">
+              <button 
+                onClick={() => setActiveRoute(null)} 
+                className="p-1.5 bg-white/10 hover:bg-white/20 rounded-xl transition-all flex-shrink-0"
+                title="Deselect Route"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
+              <div className="flex-1 truncate">
+                <h2 className="font-black text-[13px] uppercase italic truncate">{activeRoute.name}</h2>
+                <p className="text-[9px] font-bold text-yellow-400 uppercase tracking-widest truncate">By {activeRoute.author}</p>
+              </div>
             </header>
             
-            <div className="p-5 overflow-y-auto space-y-5 scrollbar-hide">
-              {/* Like/Dislike Actions */}
-              <div className="flex items-center gap-3">
+            <div className="p-3 overflow-y-auto space-y-3 scrollbar-hide">
+              <div className="flex items-center gap-2">
                 <button 
                   onClick={() => handleVote(1)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 transition-all font-black text-[10px] uppercase tracking-wider ${
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border-2 transition-all font-black text-[9px] uppercase tracking-wider ${
                     votedIds[activeRoute.id] === 1 
-                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-emerald-200 shadow-lg' 
-                      : 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100'
+                      ? 'bg-emerald-600 text-white border-emerald-600' 
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-100'
                   }`}
                 >
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
                   Like
                 </button>
                 <button 
                   onClick={() => handleVote(-1)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 transition-all font-black text-[10px] uppercase tracking-wider ${
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border-2 transition-all font-black text-[9px] uppercase tracking-wider ${
                     votedIds[activeRoute.id] === -1 
-                      ? 'bg-rose-600 text-white border-rose-600 shadow-rose-200 shadow-lg' 
-                      : 'bg-rose-50 text-rose-700 border-rose-100 hover:bg-rose-100'
+                      ? 'bg-rose-600 text-white border-rose-600' 
+                      : 'bg-rose-50 text-rose-700 border-rose-100'
                   }`}
                 >
-                  <svg className="w-4 h-4 transform rotate-180" fill="currentColor" viewBox="0 0 24 24"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
+                  <svg className="w-3 h-3 transform rotate-180" fill="currentColor" viewBox="0 0 24 24"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
                   Dislike
                 </button>
               </div>
 
-              {isAnalyzing ? (
-                <div className="space-y-3 animate-pulse">
-                  <div className="h-4 bg-slate-100 rounded w-1/2"></div>
-                  <div className="h-20 bg-slate-100 rounded-2xl"></div>
+              {!analysis && !isAnalyzing ? (
+                <button 
+                  onClick={handleAnalyze}
+                  className="w-full bg-indigo-600 text-white font-black py-2.5 rounded-xl text-[9px] uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                  Get AI Route Guide
+                </button>
+              ) : isAnalyzing ? (
+                <div className="flex flex-col items-center py-2 space-y-1 animate-pulse">
+                  <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-[8px] font-black text-indigo-900/50 uppercase">Analysis in progress...</p>
                 </div>
               ) : analysis && (
-                <div className="space-y-4">
-                  <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100">
-                    <h4 className="text-[9px] font-black text-indigo-950/40 uppercase tracking-[0.2em] mb-2">Commuter Intel</h4>
-                    <p className="text-sm text-indigo-950 leading-relaxed font-medium">"{analysis.guide}"</p>
+                <div className="space-y-2 animate-in fade-in slide-in-from-bottom-1">
+                  <div className="p-2.5 bg-indigo-50/50 rounded-xl border border-indigo-100">
+                    <p className="text-[11px] text-indigo-950 leading-tight font-medium">"{analysis.guide}"</p>
                   </div>
                   {analysis.landmarks.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {analysis.landmarks.map((l, i) => (
-                        <span key={i} className="px-2.5 py-1 bg-white text-indigo-800 text-[10px] font-bold rounded-lg border border-indigo-100 shadow-sm">{l}</span>
+                    <div className="flex flex-wrap gap-1">
+                      {analysis.landmarks.slice(0, 3).map((l, i) => (
+                        <span key={i} className="px-1.5 py-0.5 bg-white text-indigo-800 text-[8px] font-bold rounded-md border border-indigo-100">{l}</span>
                       ))}
                     </div>
                   )}
@@ -235,7 +247,7 @@ const App: React.FC = () => {
               <button 
                 onClick={() => { 
                   setIsAddingRoute(true); 
-                  setIsSidebarOpen(false); // Auto-hide sidebar on mobile
+                  setIsSidebarOpen(false); 
                   setEditingId(activeRoute.id); 
                   setNewRouteName(activeRoute.name); 
                   setNewAuthor(activeRoute.author);
@@ -243,7 +255,7 @@ const App: React.FC = () => {
                   setActiveRoute(null); 
                   setFocusedPoint(null);
                 }}
-                className="w-full bg-slate-100 text-indigo-900 font-black py-4 rounded-xl text-[10px] uppercase tracking-widest hover:bg-indigo-50 transition-all border border-indigo-100/50"
+                className="w-full bg-slate-100 text-indigo-900 font-black py-2.5 rounded-xl text-[9px] uppercase tracking-widest border border-indigo-100/50 hover:bg-slate-200"
               >
                 Refine Path
               </button>
@@ -251,62 +263,60 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Improved Route Publisher for Mobile - Floating split layout */}
+        {/* Improved Route Publisher - Compact & No Overflow */}
         {isAddingRoute && (
           <>
-            {/* Top Overlay for Inputs */}
-            <div className="absolute top-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-80 z-[1000] bg-white rounded-[1.5rem] shadow-xl p-4 border border-slate-200 animate-in slide-in-from-top-4 duration-300">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 bg-indigo-950 text-yellow-400 rounded-lg flex items-center justify-center shadow-md">
-                   <JeepneyIcon className="w-4 h-4" />
+            <div className="absolute top-3 left-3 right-3 sm:left-auto sm:right-3 sm:w-72 z-[1000] bg-white rounded-2xl shadow-xl p-3 border border-slate-200 animate-in fade-in duration-200">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-6 h-6 bg-indigo-950 text-yellow-400 rounded-lg flex items-center justify-center">
+                   <JeepneyIcon className="w-3 h-3" />
                 </div>
-                <h2 className="text-sm font-black text-indigo-950 uppercase tracking-tight">{editingId ? 'Refining Path' : 'Add New Route'}</h2>
+                <h2 className="text-[11px] font-black text-indigo-950 uppercase">{editingId ? 'Refine Path' : 'Add Route'}</h2>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <input 
                   value={newRouteName} 
                   onChange={e => setNewRouteName(e.target.value)} 
-                  placeholder="Route Name (e.g. San Andres - Padre Faura)" 
-                  className="w-full bg-slate-50 border-2 border-slate-300 rounded-xl px-4 py-2.5 text-xs font-bold text-indigo-950 outline-none focus:border-indigo-600 transition-all"
+                  placeholder="Route Name (e.g. Baclaran - Pasay)" 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-[10px] font-bold text-indigo-950 outline-none focus:border-indigo-600"
                 />
                 <input 
                   value={newAuthor} 
                   onChange={e => setNewAuthor(e.target.value)} 
-                  placeholder="Your Name (Author)" 
-                  className="w-full bg-slate-50 border-2 border-slate-300 rounded-xl px-4 py-2.5 text-xs font-bold text-indigo-950 outline-none focus:border-indigo-600 transition-all"
+                  placeholder="Contributor Name" 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-[10px] font-bold text-indigo-950 outline-none focus:border-indigo-600"
                 />
               </div>
             </div>
 
-            {/* Bottom Overlay for Controls */}
-            <div className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-80 z-[1000] space-y-3 animate-in slide-in-from-bottom-4 duration-300">
-              <div className="bg-indigo-950 text-white p-3.5 rounded-2xl flex justify-between items-center shadow-xl border border-indigo-800">
-                <div className="flex flex-col">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-yellow-400">Map Route Path</p>
-                  <p className="text-[8px] opacity-60 font-bold uppercase">{newRouteWaypoints.length} waypoints added</p>
-                </div>
+            {/* Bottom Controls - Flex row for buttons to prevent overflow */}
+            <div className="absolute bottom-3 left-3 right-3 sm:left-auto sm:right-3 sm:w-72 z-[1000] flex flex-col gap-2">
+              <div className="bg-indigo-950 text-white p-2 rounded-xl flex justify-between items-center shadow-lg border border-indigo-800">
+                <p className="text-[9px] font-black uppercase tracking-widest text-indigo-300 ml-1">
+                  <span className="text-yellow-400">{newRouteWaypoints.length}</span> Waypoints
+                </p>
                 <button 
                   onClick={() => setNewRouteWaypoints(p => p.slice(0, -1))} 
-                  className="text-[10px] font-black bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl transition-colors border border-white/20"
+                  className="text-[9px] font-black bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg border border-white/20"
                 >
                   Undo
                 </button>
               </div>
 
-              <div className="bg-white p-3 rounded-2xl shadow-2xl border border-slate-200 flex gap-2">
+              <div className="bg-white p-2 rounded-xl shadow-2xl border border-slate-200 flex flex-row gap-2">
                 <button 
                   onClick={() => { setIsAddingRoute(false); setEditingId(null); setNewRouteName(''); setNewAuthor(''); setNewRouteWaypoints([]); }} 
-                  className="flex-1 text-[10px] font-black text-slate-500 uppercase tracking-widest py-3 hover:text-red-500 transition-colors"
+                  className="flex-1 text-[9px] font-black text-slate-500 uppercase tracking-widest py-3 rounded-lg hover:bg-slate-50 bg-slate-50/50"
                 >
                   Cancel
                 </button>
                 <button 
                   onClick={handleSave} 
                   disabled={isSnapping || newRouteWaypoints.length < 2 || !newRouteName || !newAuthor} 
-                  className="flex-[2] bg-indigo-600 text-white font-black py-4 rounded-xl text-[11px] uppercase tracking-widest shadow-lg disabled:opacity-50 active:scale-95 transition-all flex items-center justify-center gap-2"
+                  className="flex-[2] bg-indigo-600 text-white font-black py-3 rounded-lg text-[10px] uppercase tracking-widest shadow-lg disabled:opacity-50 active:scale-95 flex items-center justify-center gap-2"
                 >
                   {isSnapping ? 'Smoothing...' : 'Publish'}
-                  {!isSnapping && <JeepneyIcon className="w-4 h-4" />}
+                  {!isSnapping && <JeepneyIcon className="w-3.5 h-3.5" />}
                 </button>
               </div>
             </div>
