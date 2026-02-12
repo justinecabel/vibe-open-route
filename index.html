@@ -1,0 +1,65 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Open Route | Philippines Jeepney Crowdsourced Map</title>
+  <meta name="description" content="A collaborative community map for Jeepney and Bus routes in the Philippines. Plan your commute with real-time AI guidance and placards.">
+  <meta name="keywords" content="Jeepney, Philippines, Commute, Manila, Public Transport, Crowdsourced Map">
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Open Route | Philippines Jeepney Guide">
+  <meta property="og:description" content="Map your own routes, see digital placards, and navigate the Philippines like a pro.">
+  <meta property="og:image" content="https://images.unsplash.com/photo-1518107616385-ad30221e29b9?q=80&w=1000&auto=format&fit=crop">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <style>
+    :root { --jeepney-yellow: #facc15; --indigo-primary: #312e81; }
+    body { margin: 0; padding: 0; overflow: hidden; background: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    #root { height: 100vh; width: 100vw; }
+    .leaflet-container { height: 100%; width: 100%; background: #f1f5f9; }
+    
+    /* Custom Scrollbar */
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    
+    /* Digital Placard Font Simulation */
+    .font-placard { font-family: "Impact", "Arial Black", sans-serif; letter-spacing: -0.05em; }
+
+    /* UI Transitions */
+    .sidebar-transition { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    
+    /* GPS Marker Animation */
+    .user-location-dot {
+      width: 14px; height: 14px; background: #3b82f6; border: 2px solid white; border-radius: 50%;
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.6); position: relative;
+    }
+    .user-location-dot::after {
+      content: ''; position: absolute; inset: -4px; border-radius: 50%;
+      border: 2px solid #3b82f6; animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+    }
+    @keyframes ping { 75%, 100% { transform: scale(2.5); opacity: 0; } }
+  </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom": "https://esm.sh/react-dom@^19.2.4",
+    "react-dom/client": "https://esm.sh/react-dom@^19.2.4/client",
+    "@google/genai": "https://esm.sh/@google/genai@^1.39.0",
+    "leaflet": "https://esm.sh/leaflet@^1.9.4",
+    "express": "https://esm.sh/express@^5.2.1",
+    "cors": "https://esm.sh/cors@^2.8.6",
+    "sqlite3": "https://esm.sh/sqlite3@^5.1.7",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/"
+  }
+}
+</script>
+</head>
+<body>
+  <div id="root"></div>
+</body>
+</html>

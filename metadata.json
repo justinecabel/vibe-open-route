@@ -1,0 +1,7 @@
+{
+  "name": "Jeepney Guide & Crowdsource",
+  "description": "A crowdsourced platform to map and view Jeepney routes in the Philippines. Users can visualize existing routes or draw new ones by snapping waypoints to streets, providing a collaborative commuter guide.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
