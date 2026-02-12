@@ -6,6 +6,7 @@ import { JeepneyRoute, Waypoint, GeminiAnalysis } from './types';
 import { ROUTE_COLORS } from './constants';
 import { apiService } from './services/apiService';
 import { getSnappedPath } from './services/routingService';
+import { generateJeepneyLogo } from './services/imageService';
 
 const JeepneyIcon = (props: { className?: string }) => (
   <svg className={props.className || "w-4 h-4"} fill="currentColor" viewBox="0 0 24 24">
@@ -41,11 +42,16 @@ const App: React.FC = () => {
   const [userLocation, setUserLocation] = useState<Waypoint | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [focusedPoint, setFocusedPoint] = useState<Waypoint | null>(null);
+  const [appLogo, setAppLogo] = useState<string | null>(localStorage.getItem('app_logo_v1'));
+  const [isGeneratingLogo, setIsGeneratingLogo] = useState(false);
   
   const [votedIds, setVotedIds] = useState<Record<string, number>>({});
 
   useEffect(() => {
     loadRoutes();
+    if (!appLogo) {
+      handleRegenerateLogo();
+    }
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         pos => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
@@ -53,6 +59,21 @@ const App: React.FC = () => {
       );
     }
   }, []);
+
+  useEffect(() => {
+    if (appLogo) {
+      localStorage.setItem('app_logo_v1', appLogo);
+      const favicon = document.getElementById('dynamic-favicon') as HTMLLinkElement;
+      if (favicon) favicon.href = appLogo;
+    }
+  }, [appLogo]);
+
+  const handleRegenerateLogo = async () => {
+    setIsGeneratingLogo(true);
+    const newLogo = await generateJeepneyLogo();
+    if (newLogo) setAppLogo(newLogo);
+    setIsGeneratingLogo(false);
+  };
 
   const loadRoutes = async () => {
     const data = await apiService.getRoutes();
@@ -126,16 +147,14 @@ const App: React.FC = () => {
 
   const handleMapClick = (point: Waypoint) => {
     if (isAddingRoute) return;
-    // Dismiss active route details when clicking elsewhere on the map
     setActiveRoute(null);
     setFocusedPoint(point);
-    // Auto-open sidebar on mobile for better SEO/discoverability of matching routes
     if (window.innerWidth < 1024) setIsSidebarOpen(true);
   };
 
   const filteredRoutes = useMemo(() => {
     if (!focusedPoint) return routes;
-    const threshold = 120; // 120 meters filter
+    const threshold = 120;
     return routes.filter(route => 
       route.path.some(coord => getDistance(focusedPoint, coord) < threshold)
     );
@@ -163,6 +182,9 @@ const App: React.FC = () => {
         onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
         onClearFilter={() => setFocusedPoint(null)}
         isFiltered={!!focusedPoint}
+        appLogo={appLogo}
+        onRegenerateLogo={handleRegenerateLogo}
+        isGeneratingLogo={isGeneratingLogo}
       />
 
       <main className="flex-1 relative overflow-hidden">
@@ -174,7 +196,6 @@ const App: React.FC = () => {
           focusedPoint={focusedPoint} userLocation={userLocation}
         />
 
-        {/* Route Info Popup - Compact & SEO Friendly */}
         {activeRoute && !isAddingRoute && (
           <div className="absolute top-3 left-3 right-3 sm:left-auto sm:right-3 sm:w-80 z-[2002] bg-white/95 backdrop-blur-md rounded-3xl shadow-2xl border border-white/50 overflow-hidden max-h-[85vh] flex flex-col animate-in slide-in-from-top-2 duration-300">
             <header className="p-3 bg-indigo-950 text-white flex items-center gap-3">
@@ -264,13 +285,12 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Route Drawing/Editing UI - Compact and Non-overflowing */}
         {isAddingRoute && (
           <>
             <div className="absolute top-3 left-3 right-3 sm:left-auto sm:right-3 sm:w-72 z-[1000] bg-white rounded-2xl shadow-xl p-3 border border-slate-200 animate-in fade-in duration-200">
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-6 h-6 bg-indigo-950 text-yellow-400 rounded-lg flex items-center justify-center">
-                   <JeepneyIcon className="w-3 h-3" />
+                <div className="w-8 h-8 bg-indigo-950 rounded-lg flex items-center justify-center shrink-0 border border-yellow-400 overflow-hidden">
+                   {appLogo ? <img src={appLogo} className="w-full h-full object-cover" /> : <JeepneyIcon className="w-4 h-4 text-yellow-400" />}
                 </div>
                 <h2 className="text-[11px] font-black text-indigo-950 uppercase tracking-wider">{editingId ? 'Refine Path' : 'Map New Route'}</h2>
               </div>

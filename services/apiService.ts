@@ -6,10 +6,12 @@ const LOCAL_CACHE_KEY = 'open_route_store_v2';
 
 /**
  * Common headers for all API requests.
- * Includes ngrok-skip-browser-warning to bypass the landing page on ngrok tunnels.
+ * 'ngrok-skip-browser-warning' is required to bypass ngrok's interstitial page.
+ * 'Accept' header helps ensure the server knows we expect JSON.
  */
 const getHeaders = (extraHeaders: Record<string, string> = {}) => {
   return {
+    'Accept': 'application/json',
     'Content-Type': 'application/json',
     'ngrok-skip-browser-warning': 'true', 
     ...extraHeaders,
@@ -35,14 +37,20 @@ export const apiService = {
       const res = await fetch(`${API_BASE}/routes`, {
         method: 'GET',
         headers: getHeaders(),
-        mode: 'cors'
+        mode: 'cors',
+        cache: 'no-cache'
       });
-      if (!res.ok) throw new Error(`API unreachable: ${res.status}`);
+      
+      if (!res.ok) {
+        console.error(`Backend Error: ${res.status} ${res.statusText}`);
+        throw new Error(`API unreachable: ${res.status}`);
+      }
+      
       const data = await res.json();
       saveLocalData(data);
       return data;
     } catch (error) {
-      console.warn("Backend unavailable or CORS error, using local cache.", error);
+      console.error("Fetch failed. If this is a CORS error, ensure your backend has 'cors' middleware installed and configured to allow the 'ngrok-skip-browser-warning' header.", error);
       return getLocalData();
     }
   },
@@ -103,7 +111,11 @@ export const apiService = {
       return await res.json();
     } catch (e) {
       console.error("AI Analysis error:", e);
-      return { guide: "Commuter guide unavailable. Please check your connection to the backend.", landmarks: [], tips: [] };
+      return { 
+        guide: "Commuter guide unavailable. Ensure your backend allows CORS and the 'ngrok-skip-browser-warning' header.", 
+        landmarks: [], 
+        tips: [] 
+      };
     }
   }
 };

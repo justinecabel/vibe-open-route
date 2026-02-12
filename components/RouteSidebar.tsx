@@ -13,6 +13,9 @@ interface RouteSidebarProps {
   onToggle: () => void;
   onClearFilter: () => void;
   isFiltered: boolean;
+  appLogo: string | null;
+  onRegenerateLogo: () => void;
+  isGeneratingLogo: boolean;
 }
 
 const JeepneyIcon = (props: { className?: string }) => (
@@ -23,7 +26,8 @@ const JeepneyIcon = (props: { className?: string }) => (
 
 const RouteSidebar: React.FC<RouteSidebarProps> = ({ 
   routes, activeRoute, onSelectRoute, onAddRouteClick, 
-  isOpen, onToggle, onClearFilter, isFiltered, isAddingRoute
+  isOpen, onToggle, onClearFilter, isFiltered, isAddingRoute,
+  appLogo, onRegenerateLogo, isGeneratingLogo
 }) => {
   const [query, setQuery] = useState('');
 
@@ -34,7 +38,6 @@ const RouteSidebar: React.FC<RouteSidebarProps> = ({
 
   return (
     <>
-      {/* QA FIX: Hide menu button when a route is active to prevent overlap with 'X' button */}
       {!isAddingRoute && !activeRoute && (
         <button 
           onClick={onToggle}
@@ -53,12 +56,18 @@ const RouteSidebar: React.FC<RouteSidebarProps> = ({
         isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       }`}>
         <header className="p-4 bg-indigo-950 text-white">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-yellow-400 rounded-lg flex items-center justify-center text-indigo-950 shadow-md">
-              <JeepneyIcon className="w-5 h-5" />
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white rounded-xl overflow-hidden shadow-lg border-2 border-yellow-400 flex items-center justify-center shrink-0">
+              {appLogo ? (
+                <img src={appLogo} alt="Logo" className="w-full h-full object-cover" />
+              ) : (
+                <div className="text-indigo-950">
+                   <JeepneyIcon className="w-6 h-6" />
+                </div>
+              )}
             </div>
-            <div>
-              <h1 className="text-lg font-black italic tracking-tighter uppercase leading-none">Open Route</h1>
+            <div className="overflow-hidden">
+              <h1 className="text-lg font-black italic tracking-tighter uppercase leading-none truncate">Open Route</h1>
               <p className="text-[8px] font-bold text-yellow-400 uppercase tracking-widest mt-1">Philippine Transit Hub</p>
             </div>
           </div>
@@ -113,13 +122,21 @@ const RouteSidebar: React.FC<RouteSidebarProps> = ({
           )}
         </nav>
 
-        <footer className="p-3 border-t bg-white">
+        <footer className="p-3 border-t bg-white space-y-2">
           <button 
             onClick={onAddRouteClick} 
             className="w-full bg-indigo-950 text-white font-black py-3 rounded-xl text-[9px] uppercase tracking-widest shadow-lg hover:bg-black transition-all flex items-center justify-center gap-2"
           >
             <JeepneyIcon className="w-3.5 h-3.5" />
             + Contribute Route
+          </button>
+          
+          <button 
+            onClick={onRegenerateLogo}
+            disabled={isGeneratingLogo}
+            className="w-full text-slate-400 text-[8px] font-black uppercase tracking-widest text-center hover:text-indigo-600 transition-colors py-1 disabled:animate-pulse"
+          >
+            {isGeneratingLogo ? 'Crafting Brand...' : 'Refine AI Branding'}
           </button>
         </footer>
       </aside>

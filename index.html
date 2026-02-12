@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Open Route | Philippines Jeepney Route Helper & Commuter Guide</title>
+  <link id="dynamic-favicon" rel="icon" type="image/png" href="https://images.unsplash.com/photo-1518107616385-ad30221e29b9?q=80&w=32&auto=format&fit=crop">
   
   <!-- SEO Meta Tags -->
   <meta name="description" content="Find the best Jeepney routes in the Philippines. A crowdsourced commuter guide with AI route analysis, digital placards, and road-snapped maps.">
@@ -19,23 +20,6 @@
   <meta property="og:url" content="https://open-route.ph">
   <meta property="og:image" content="https://images.unsplash.com/photo-1518107616385-ad30221e29b9?q=80&w=1200&auto=format&fit=crop">
 
-  <!-- JSON-LD Structured Data for SEO -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "Open Route Jeepney Helper",
-    "operatingSystem": "Web",
-    "applicationCategory": "TravelApplication",
-    "description": "A crowdsourced platform to map and view Jeepney routes in the Philippines.",
-    "offers": {
-      "@type": "Offer",
-      "price": "0",
-      "priceCurrency": "PHP"
-    }
-  }
-  </script>
-
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   <style>
@@ -43,17 +27,9 @@
     body { margin: 0; padding: 0; overflow: hidden; background: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     #root { height: 100vh; width: 100vw; }
     .leaflet-container { height: 100%; width: 100%; background: #f1f5f9; }
-    
-    /* Custom Scrollbar */
     .scrollbar-hide::-webkit-scrollbar { display: none; }
-    
-    /* Digital Placard Font Simulation */
     .font-placard { font-family: "Impact", "Arial Black", "Arial Bold", sans-serif; letter-spacing: -0.02em; }
-
-    /* UI Transitions */
     .sidebar-transition { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-    
-    /* GPS Marker Animation */
     .user-location-dot {
       width: 14px; height: 14px; background: #3b82f6; border: 2px solid white; border-radius: 50%;
       box-shadow: 0 0 15px rgba(59, 130, 246, 0.6); position: relative;
