@@ -41,6 +41,7 @@ const App: React.FC = () => {
   const [userLocation, setUserLocation] = useState<Waypoint | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [focusedPoint, setFocusedPoint] = useState<Waypoint | null>(null);
+  const [isBackendConnected, setIsBackendConnected] = useState(false);
   
   const [votedIds, setVotedIds] = useState<Record<string, number>>(() => {
     try {
@@ -55,6 +56,26 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('vibe_user_votes', JSON.stringify(votedIds));
   }, [votedIds]);
+
+  // Subscribe to backend connection status changes
+  useEffect(() => {
+    const unsubscribe = apiService.onConnectionStatusChange((connected) => {
+      setIsBackendConnected(connected);
+    });
+
+    // Check connection immediately
+    apiService.checkBackendConnection();
+
+    // Check connection periodically every 10 seconds
+    const interval = setInterval(() => {
+      apiService.checkBackendConnection();
+    }, 10000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     loadRoutes();
@@ -178,6 +199,14 @@ const App: React.FC = () => {
       />
 
       <main className="flex-1 relative overflow-hidden">
+        {/* Backend Connection Status Indicator */}
+        <div className="fixed top-3 left-1/2 transform -translate-x-1/2 z-[4000] flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/90 backdrop-blur-md border border-white/50 shadow-lg animate-in fade-in duration-300">
+          <div className={`w-2.5 h-2.5 rounded-full ${isBackendConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></div>
+          <p className="text-[9px] font-bold uppercase tracking-widest text-indigo-950">
+            {isBackendConnected ? '✓ Backend Connected' : '✗ Backend Offline'}
+          </p>
+        </div>
+
         <JeepneyMap 
           routes={routes} activeRoute={activeRoute} isAddingRoute={isAddingRoute}
           onWaypointAdd={p => setNewRouteWaypoints(prev => [...prev, p])}

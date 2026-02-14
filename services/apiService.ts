@@ -4,6 +4,10 @@ import { ENV } from '../env';
 const API_BASE = ENV.BACKEND_API;
 const LOCAL_CACHE_KEY = 'open_route_store_v2';
 
+// Connection status tracking
+let isBackendConnected = false;
+let syncInProgressCallbacks: ((connected: boolean) => void)[] = [];
+
 /**
  * Common headers for all API requests.
  * 'ngrok-skip-browser-warning' is required to bypass ngrok's interstitial page.
@@ -31,6 +35,83 @@ const saveLocalData = (routes: JeepneyRoute[]) => {
   localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(routes));
 };
 
+/**
+ * Check if backend is connected and update connection status
+ */
+const checkBackendConnection = async (): Promise<boolean> => {
+  try {
+    const res = await fetch(`${API_BASE}/routes`, {
+      method: 'GET',
+      headers: getHeaders(),
+      mode: 'cors',
+      cache: 'no-cache',
+      signal: AbortSignal.timeout(5000) // 5 second timeout
+    });
+    const connected = res.ok;
+    if (connected !== isBackendConnected) {
+      isBackendConnected = connected;
+      // Notify listeners of connection status change
+      syncInProgressCallbacks.forEach(cb => cb(connected));
+      // If reconnected, sync pending routes
+      if (connected) {
+        syncPendingRoutes();
+      }
+    }
+    return connected;
+  } catch (error) {
+    if (isBackendConnected) {
+      isBackendConnected = false;
+      syncInProgressCallbacks.forEach(cb => cb(false));
+    }
+    return false;
+  }
+};
+
+/**
+ * Sync all pending routes to the backend
+ */
+const syncPendingRoutes = async () => {
+  const routes = getLocalData();
+  const pendingRoutes = routes.filter(r => r.syncStatus === 'pending');
+  
+  for (const route of pendingRoutes) {
+    try {
+      const res = await fetch(`${API_BASE}/routes`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(route),
+        mode: 'cors'
+      });
+      if (res.ok) {
+        const synced = { ...(await res.json()), syncStatus: 'synced' as const };
+        const updated = routes.map(r => r.id === synced.id ? synced : r);
+        saveLocalData(updated);
+      }
+    } catch (error) {
+      console.error(`Failed to sync route ${route.id}:`, error);
+    }
+  }
+};
+
+/**
+ * Subscribe to backend connection status changes
+ */
+const onConnectionStatusChange = (callback: (connected: boolean) => void) => {
+  syncInProgressCallbacks.push(callback);
+  // Immediately call with current status
+  callback(isBackendConnected);
+  return () => {
+    syncInProgressCallbacks = syncInProgressCallbacks.filter(cb => cb !== callback);
+  };
+};
+
+/**
+ * Get current backend connection status
+ */
+const getBackendStatus = (): boolean => {
+  return isBackendConnected;
+};
+
 export const apiService = {
   async getRoutes(): Promise<JeepneyRoute[]> {
     try {
@@ -48,9 +129,11 @@ export const apiService = {
       
       const data = await res.json();
       saveLocalData(data);
+      isBackendConnected = true;
       return data;
     } catch (error) {
       console.error("Fetch failed. If this is a CORS error, ensure your backend has 'cors' middleware installed and configured to allow the 'ngrok-skip-browser-warning' header.", error);
+      isBackendConnected = false;
       return getLocalData();
     }
   },
@@ -112,10 +195,16 @@ export const apiService = {
     } catch (e) {
       console.error("AI Analysis error:", e);
       return { 
-        guide: "Commuter guide unavailable. Ensure your backend allows CORS and the 'ngrok-skip-browser-warning' header.", 
+        guide: "Client ready. Analysis service unavailable.", 
         landmarks: [], 
         tips: [] 
       };
     }
-  }
+  },
+
+  // Connection monitoring
+  checkBackendConnection,
+  onConnectionStatusChange,
+  getBackendStatus,
+  syncPendingRoutes
 };
