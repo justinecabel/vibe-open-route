@@ -142,7 +142,7 @@ const App: React.FC = () => {
   }, [routes, focusedPoint]);
 
   return (
-    <div className="flex h-screen w-full font-sans bg-slate-50 overflow-hidden relative text-indigo-950 text-sm">
+    <div className="flex h-dvh w-full font-sans bg-slate-50 overflow-hidden relative text-indigo-950 text-sm">
       <RouteSidebar 
         routes={filteredRoutes} 
         totalRoutesCount={routes.length}
@@ -176,7 +176,7 @@ const App: React.FC = () => {
 
         {/* Route Info Popup - Compact & SEO Friendly */}
         {activeRoute && !isAddingRoute && (
-          <div className="absolute top-3 left-3 right-3 sm:left-auto sm:right-3 sm:w-80 z-[2002] bg-white/95 backdrop-blur-md rounded-3xl shadow-2xl border border-white/50 overflow-hidden max-h-[85vh] flex flex-col animate-in slide-in-from-top-2 duration-300">
+          <div className="fixed top-3 left-3 right-3 md:left-auto md:right-3 md:w-80 z-[2002] bg-white/95 backdrop-blur-md rounded-3xl shadow-2xl border border-white/50 overflow-hidden max-h-[80vh] flex flex-col animate-in slide-in-from-top-2 duration-300">
             <header className="p-3 bg-indigo-950 text-white flex items-center gap-3">
               <button 
                 onClick={() => setActiveRoute(null)} 
@@ -191,7 +191,7 @@ const App: React.FC = () => {
               </div>
             </header>
             
-            <div className="p-3 overflow-y-auto space-y-3 scrollbar-hide">
+            <div className="p-3 overflow-y-auto space-y-3 scrollbar-hide flex-1">
               <div className="flex items-center gap-2">
                 <button 
                   onClick={() => handleVote(1)}
@@ -267,7 +267,7 @@ const App: React.FC = () => {
         {/* Route Drawing/Editing UI - Compact and Non-overflowing */}
         {isAddingRoute && (
           <>
-            <div className="absolute top-3 left-3 right-3 sm:left-auto sm:right-3 sm:w-72 z-[1000] bg-white rounded-2xl shadow-xl p-3 border border-slate-200 animate-in fade-in duration-200">
+            <div className="fixed top-3 left-3 right-3 md:left-auto md:right-3 md:w-72 z-[1000] bg-white rounded-2xl shadow-xl p-3 border border-slate-200 animate-in fade-in duration-200 max-h-[35vh] overflow-y-auto">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-6 h-6 bg-indigo-950 text-yellow-400 rounded-lg flex items-center justify-center">
                    <JeepneyIcon className="w-3 h-3" />
@@ -290,7 +290,7 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            <div className="fixed bottom-0 left-0 right-3 sm:left-auto sm:right-0 sm:w-72 sm:bottom-3 z-[1000] flex flex-col gap-2 p-3 sm:p-0">
+            <div className="fixed bottom-0 left-0 right-0 md:left-auto md:w-80 md:bottom-3 md:right-3 z-[1000] flex flex-col gap-2 p-3 md:p-0">
               <div className="bg-indigo-950 text-white p-2 rounded-xl flex justify-between items-center shadow-lg border border-indigo-800">
                 <p className="text-[9px] font-black uppercase tracking-widest text-indigo-300 ml-1">
                   <span className="text-yellow-400">{newRouteWaypoints.length}</span> Points
@@ -303,17 +303,17 @@ const App: React.FC = () => {
                 </button>
               </div>
 
-              <div className="bg-white p-2 rounded-xl shadow-2xl border border-slate-200 flex flex-row gap-2">
+              <div className="bg-white p-2 rounded-xl shadow-2xl border border-slate-200 flex flex-row gap-2 md:flex-col">
                 <button 
                   onClick={() => { setIsAddingRoute(false); setEditingId(null); setNewRouteName(''); setNewAuthor(''); setNewRouteWaypoints([]); }} 
-                  className="flex-1 text-[9px] font-black text-slate-500 uppercase tracking-widest py-3 rounded-lg hover:bg-slate-50 bg-slate-50/50"
+                  className="flex-1 text-[9px] font-black text-slate-500 uppercase tracking-widest py-3 rounded-lg hover:bg-slate-50 bg-slate-50/50 min-h-12"
                 >
                   Cancel
                 </button>
                 <button 
                   onClick={handleSave} 
                   disabled={isSnapping || newRouteWaypoints.length < 2 || !newRouteName || !newAuthor} 
-                  className="flex-[2] bg-indigo-600 text-white font-black py-3 rounded-lg text-[10px] uppercase tracking-widest shadow-lg disabled:opacity-50 active:scale-95 flex items-center justify-center gap-2"
+                  className="flex-[2] md:flex-1 bg-indigo-600 text-white font-black py-3 rounded-lg text-[10px] uppercase tracking-widest shadow-lg disabled:opacity-50 active:scale-95 flex items-center justify-center gap-2 min-h-12"
                 >
                   {isSnapping ? 'Snapping...' : 'Publish'}
                   {!isSnapping && <JeepneyIcon className="w-3.5 h-3.5" />}

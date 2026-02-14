@@ -51,7 +51,7 @@ const RouteSidebar: React.FC<RouteSidebarProps> = ({
 
       <aside className={`fixed lg:static inset-y-0 left-0 w-72 bg-white border-r flex flex-col z-[2000] sidebar-transition shadow-2xl lg:shadow-none ${
         isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-      }`}>
+      } max-h-dvh overflow-hidden`}>
         <header className="p-4 bg-indigo-950 text-white">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-yellow-400 rounded-lg flex items-center justify-center text-indigo-950 shadow-md">
@@ -89,7 +89,7 @@ const RouteSidebar: React.FC<RouteSidebarProps> = ({
           )}
         </section>
 
-        <nav className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-hide">
+        <nav className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-hide pb-20 lg:pb-2">
           <h2 className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1">Available Routes</h2>
           {filtered.map(route => (
             <div 
@@ -113,7 +113,7 @@ const RouteSidebar: React.FC<RouteSidebarProps> = ({
           )}
         </nav>
 
-        <footer className="p-3 border-t bg-white">
+        <footer className="sticky bottom-0 p-3 border-t bg-white shadow-2xl z-10">
           <button 
             onClick={onAddRouteClick} 
             className="w-full bg-indigo-950 text-white font-black py-3 rounded-xl text-[9px] uppercase tracking-widest shadow-lg hover:bg-black transition-all flex items-center justify-center gap-2"
