@@ -290,7 +290,7 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            <div className="absolute bottom-3 left-3 right-3 sm:left-auto sm:right-3 sm:w-72 z-[1000] flex flex-col gap-2">
+            <div className="fixed bottom-0 left-0 right-3 sm:left-auto sm:right-0 sm:w-72 sm:bottom-3 z-[1000] flex flex-col gap-2 p-3 sm:p-0">
               <div className="bg-indigo-950 text-white p-2 rounded-xl flex justify-between items-center shadow-lg border border-indigo-800">
                 <p className="text-[9px] font-black uppercase tracking-widest text-indigo-300 ml-1">
                   <span className="text-yellow-400">{newRouteWaypoints.length}</span> Points
