@@ -42,7 +42,19 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [focusedPoint, setFocusedPoint] = useState<Waypoint | null>(null);
   
-  const [votedIds, setVotedIds] = useState<Record<string, number>>({});
+  const [votedIds, setVotedIds] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem('vibe_user_votes');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Persist votes to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('vibe_user_votes', JSON.stringify(votedIds));
+  }, [votedIds]);
 
   useEffect(() => {
     loadRoutes();
