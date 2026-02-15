@@ -108,8 +108,6 @@ const syncPendingRoutes = async () => {
  */
 const onConnectionStatusChange = (callback: (connected: boolean) => void) => {
   syncInProgressCallbacks.push(callback);
-  // Immediately call with current status
-  callback(isBackendConnected);
   return () => {
     syncInProgressCallbacks = syncInProgressCallbacks.filter(cb => cb !== callback);
   };
