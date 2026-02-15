@@ -42,6 +42,8 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [focusedPoint, setFocusedPoint] = useState<Waypoint | null>(null);
   const [isBackendConnected, setIsBackendConnected] = useState(false);
+  const [showConnectionStatus, setShowConnectionStatus] = useState(false);
+  const connectionTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   
   const [votedIds, setVotedIds] = useState<Record<string, number>>(() => {
     try {
@@ -61,6 +63,22 @@ const App: React.FC = () => {
   useEffect(() => {
     const unsubscribe = apiService.onConnectionStatusChange((connected) => {
       setIsBackendConnected(connected);
+      
+      // Clear existing timeout
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+      }
+      
+      if (connected) {
+        // If reconnected, show status briefly then hide
+        setShowConnectionStatus(true);
+        connectionTimeoutRef.current = setTimeout(() => {
+          setShowConnectionStatus(false);
+        }, 2000); // Hide after 2 seconds of being connected
+      } else {
+        // If disconnected, show immediately and keep showing
+        setShowConnectionStatus(true);
+      }
     });
 
     // Check connection immediately
@@ -74,6 +92,9 @@ const App: React.FC = () => {
     return () => {
       unsubscribe();
       clearInterval(interval);
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -199,13 +220,19 @@ const App: React.FC = () => {
       />
 
       <main className="flex-1 relative overflow-hidden">
-        {/* Backend Connection Status Indicator */}
-        <div className="fixed top-3 left-1/2 transform -translate-x-1/2 z-[4000] flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/90 backdrop-blur-md border border-white/50 shadow-lg animate-in fade-in duration-300">
-          <div className={`w-2.5 h-2.5 rounded-full ${isBackendConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></div>
-          <p className="text-[9px] font-bold uppercase tracking-widest text-indigo-950">
-            {isBackendConnected ? '✓ Backend Connected' : '✗ Backend Offline'}
-          </p>
-        </div>
+        {/* Backend Connection Status Indicator - Only show when offline or just reconnected */}
+        {showConnectionStatus && (
+          <div className={`fixed top-3 left-1/2 transform -translate-x-1/2 z-[4000] flex items-center gap-2 px-3 py-1.5 rounded-full backdrop-blur-md border border-white/50 shadow-lg animate-in fade-in duration-300 ${
+            isBackendConnected 
+              ? 'bg-emerald-500/95 text-white' 
+              : 'bg-white/90 text-indigo-950'
+          }`}>
+            <div className={`w-2.5 h-2.5 rounded-full ${isBackendConnected ? 'bg-white animate-pulse' : 'bg-rose-500'}`}></div>
+            <p className="text-[9px] font-bold uppercase tracking-widest">
+              {isBackendConnected ? '✓ Backend Reconnected' : '✗ Backend Offline'}
+            </p>
+          </div>
+        )}
 
         <JeepneyMap 
           routes={routes} activeRoute={activeRoute} isAddingRoute={isAddingRoute}

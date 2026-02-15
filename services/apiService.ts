@@ -4,9 +4,10 @@ import { ENV } from '../env';
 const API_BASE = ENV.BACKEND_API;
 const LOCAL_CACHE_KEY = 'open_route_store_v2';
 
-// Connection status tracking
-let isBackendConnected = false;
+// Connection status tracking with debounce
+let isBackendConnected = true; // Start as true to avoid false offline on initial load
 let syncInProgressCallbacks: ((connected: boolean) => void)[] = [];
+let failureCount = 0;
 
 /**
  * Common headers for all API requests.
@@ -45,24 +46,33 @@ const checkBackendConnection = async (): Promise<boolean> => {
       headers: getHeaders(),
       mode: 'cors',
       cache: 'no-cache',
-      signal: AbortSignal.timeout(5000) // 5 second timeout
+      signal: AbortSignal.timeout(3000) // 3 second timeout
     });
     const connected = res.ok;
-    if (connected !== isBackendConnected) {
-      isBackendConnected = connected;
-      // Notify listeners of connection status change
-      syncInProgressCallbacks.forEach(cb => cb(connected));
-      // If reconnected, sync pending routes
-      if (connected) {
+    
+    // Successful response resets failure count
+    if (connected) {
+      failureCount = 0;
+      if (!isBackendConnected) {
+        isBackendConnected = true;
+        // Notify listeners of connection status change
+        syncInProgressCallbacks.forEach(cb => cb(true));
+        // Sync pending routes when reconnected
         syncPendingRoutes();
       }
     }
+    
     return connected;
   } catch (error) {
-    if (isBackendConnected) {
+    // Increment failure count, only mark as disconnected after 2 consecutive failures
+    failureCount++;
+    
+    if (failureCount >= 2 && isBackendConnected) {
       isBackendConnected = false;
+      // Notify listeners of connection status change
       syncInProgressCallbacks.forEach(cb => cb(false));
     }
+    
     return false;
   }
 };
