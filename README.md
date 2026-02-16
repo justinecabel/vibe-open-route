@@ -37,25 +37,16 @@ App runs on `http://localhost:3000`.
 
 ## Configuration
 
-### Gemini key (build-time)
+### Environment variables
 
 Set in `.env` or `.env.local`:
 
 ```bash
+VITE_BACKEND_API=http://localhost:3001/api
 GEMINI_API_KEY=your_key_here
 ```
 
-### Backend API URL
-
-The frontend currently reads backend URL from `env.ts`:
-
-```ts
-export const ENV = {
-  BACKEND_API: 'https://your-api-host/api'
-};
-```
-
-Update this before deployment.
+Use `.env.example` as the template.
 
 ## Scripts
 
@@ -76,7 +67,7 @@ For stronger indexing on JS-heavy pages, use prerendering or SSR in production.
 
 ## Deployment Checklist
 
-1. Set a real backend URL in `env.ts`.
+1. Set `VITE_BACKEND_API` for the deployment environment.
 2. Ensure canonical domain in `index.html` matches production.
 3. Update `public/sitemap.xml` with real URLs and `lastmod`.
 4. Submit sitemap in Google Search Console and Bing Webmaster Tools.

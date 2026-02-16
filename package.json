@@ -9,13 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
     "@google/genai": "^1.39.0",
     "leaflet": "^1.9.4",
-    "express": "^5.2.1",
-    "cors": "^2.8.6",
-    "sqlite3": "^5.1.7"
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

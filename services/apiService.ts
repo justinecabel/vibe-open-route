@@ -1,4 +1,4 @@
-import { JeepneyRoute, GeminiAnalysis } from '../types';
+import { JeepneyRoute, GeminiAnalysis, RouteRefinement } from '../types';
 import { ENV } from '../env';
 
 const API_BASE = ENV.BACKEND_API;
@@ -45,6 +45,20 @@ const toTimestamp = (value: unknown, fallback: number): number => {
   return fallback;
 };
 
+const normalizeRefinement = (raw: any, fallbackContributor: string, fallbackTs: number, index: number): RouteRefinement => {
+  const createdAt = toTimestamp(
+    raw?.createdAt ?? raw?.created ?? raw?.created_at ?? raw?.timestamp,
+    fallbackTs
+  );
+  return {
+    id: String(raw?.id ?? `ref-${createdAt}-${index}`),
+    contributor: String(raw?.contributor ?? raw?.author ?? fallbackContributor),
+    createdAt,
+    score: Number.isFinite(raw?.score) ? Number(raw.score) : 1,
+    votes: Number.isFinite(raw?.votes) ? Number(raw.votes) : 1,
+  };
+};
+
 const normalizeRoute = (raw: any): JeepneyRoute => {
   const now = Date.now();
   const createdAt = toTimestamp(
@@ -60,11 +74,34 @@ const normalizeRoute = (raw: any): JeepneyRoute => {
       raw?.updated_at,
     createdAt
   );
+  const rawRefinements = Array.isArray(raw?.refinementHistory)
+    ? raw.refinementHistory
+    : Array.isArray(raw?.refinements)
+      ? raw.refinements
+      : [];
+  const normalizedRefinements = rawRefinements
+    .map((entry: any, index: number) => normalizeRefinement(entry, raw?.author ?? 'Unknown', createdAt, index))
+    .sort((a: RouteRefinement, b: RouteRefinement) => a.createdAt - b.createdAt);
+  const fallbackRefinement: RouteRefinement = {
+    id: `ref-${raw?.id ?? 'route'}-initial`,
+    contributor: String(raw?.author ?? 'Unknown'),
+    createdAt,
+    score: Number.isFinite(raw?.score) ? Number(raw.score) : 1,
+    votes: Number.isFinite(raw?.votes) ? Number(raw.votes) : 1,
+  };
+  const refinementHistory = normalizedRefinements.length > 0 ? normalizedRefinements : [fallbackRefinement];
+  const activeRefinementId = String(raw?.activeRefinementId ?? refinementHistory[refinementHistory.length - 1].id);
+  const activeRefinement = refinementHistory.find(ref => ref.id === activeRefinementId) ?? refinementHistory[refinementHistory.length - 1];
 
   return {
     ...raw,
+    parentRouteId: raw?.parentRouteId ?? raw?.parent_route_id ?? undefined,
+    score: activeRefinement.score,
+    votes: activeRefinement.votes,
     createdAt,
     lastRefinedAt,
+    refinementHistory,
+    activeRefinementId: activeRefinement.id,
   };
 };
 
@@ -180,7 +217,7 @@ export const apiService = {
 
   async saveRoute(route: JeepneyRoute): Promise<JeepneyRoute> {
     const localRoutes = getLocalData();
-    const pendingRoute = { ...route, syncStatus: 'pending' as const };
+    const pendingRoute = { ...normalizeRoute(route), syncStatus: 'pending' as const };
     saveLocalData([...localRoutes.filter(r => r.id !== route.id), pendingRoute]);
 
     try {
@@ -197,6 +234,49 @@ export const apiService = {
     } catch (error) {
       console.error("Failed to save route to backend:", error);
       return pendingRoute;
+    }
+  },
+
+  async voteRefinement(routeId: string, refinementId: string, delta: number): Promise<JeepneyRoute> {
+    try {
+      const res = await fetch(`${API_BASE}/routes/${routeId}/refinements/${refinementId}/vote`, {
+        method: 'PATCH',
+        headers: getHeaders(),
+        body: JSON.stringify({ delta }),
+        mode: 'cors'
+      });
+      if (!res.ok) throw new Error(`Refinement vote failed: ${res.status}`);
+      return normalizeRoute(await res.json());
+    } catch (error) {
+      const cache = getLocalData();
+      const routeIndex = cache.findIndex(r => r.id === routeId);
+      if (routeIndex === -1) throw error;
+
+      const route = normalizeRoute(cache[routeIndex]);
+      const refIndex = route.refinementHistory.findIndex(ref => ref.id === refinementId);
+      if (refIndex === -1) throw error;
+
+      const refinement = route.refinementHistory[refIndex];
+      const updatedRefinement: RouteRefinement = {
+        ...refinement,
+        score: refinement.score + delta,
+        votes: Math.max(0, refinement.votes + 1),
+      };
+      const refinementHistory = route.refinementHistory.map((ref, idx) =>
+        idx === refIndex ? updatedRefinement : ref
+      );
+      const activeRefinementId = route.activeRefinementId ?? refinementHistory[refinementHistory.length - 1].id;
+      const activeRefinement =
+        refinementHistory.find(ref => ref.id === activeRefinementId) ?? refinementHistory[refinementHistory.length - 1];
+      const updatedRoute: JeepneyRoute = {
+        ...route,
+        refinementHistory,
+        score: activeRefinement.score,
+        votes: activeRefinement.votes,
+      };
+      cache[routeIndex] = updatedRoute;
+      saveLocalData(cache);
+      return updatedRoute;
     }
   },
 
