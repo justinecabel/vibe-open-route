@@ -40,9 +40,22 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
       const container = document.getElementById('map-container');
       if (!container) return;
 
-      mapRef.current = L.map(container, { zoomControl: false }).setView([14.575, 120.990], 14);
+      // Philippines bounds to prevent wrapping
+      const philippinesBounds = L.latLngBounds(
+        [4.6, 117.0],  // Southwest corner
+        [21.3, 129.2]  // Northeast corner
+      );
+
+      mapRef.current = L.map(container, { 
+        zoomControl: false,
+        maxBounds: philippinesBounds,
+        maxBoundsViscosity: 1.0
+      }).setView([14.575, 120.990], 14);
+
+      // Base layer - CartoDB with no wrapping
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; CARTO'
+        attribution: '&copy; CARTO',
+        noWrap: true
       }).addTo(mapRef.current);
     }
   }, []);
