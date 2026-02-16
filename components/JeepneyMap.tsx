@@ -16,7 +16,7 @@ interface JeepneyMapProps {
   userLocation: Waypoint | null;
 }
 
-const MIN_ZOOM_FOR_WAYPOINTS = 15;
+const MIN_ZOOM_FOR_WAYPOINTS = 17;
 const MAX_AUTO_FIT_ZOOM = 18;
 
 const isValidLatLng = (point: [number, number]) =>

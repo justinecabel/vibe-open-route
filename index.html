@@ -4,20 +4,32 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+  <meta name="googlebot" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+  <meta name="theme-color" content="#312e81">
   <title>Open Route | Philippines Jeepney Route Helper & Commuter Guide</title>
   
   <!-- SEO Meta Tags -->
   <meta name="description" content="Find the best Jeepney routes in the Philippines. A crowdsourced commuter guide with AI route analysis, digital placards, and road-snapped maps.">
   <meta name="keywords" content="Philippines Jeepney routes, Jeepney route helper, Manila commute guide, crowdsourced transit map, commute Philippines, jeepney map manila">
   <meta name="author" content="Open Route Community">
-  <link rel="canonical" href="https://open-route.ph" />
+  <link rel="canonical" href="https://open-route.netlify.app" />
+  <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
 
   <!-- Open Graph / Social Media -->
   <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Open Route">
+  <meta property="og:locale" content="en_PH">
   <meta property="og:title" content="Open Route | Philippines Jeepney Route Helper">
   <meta property="og:description" content="Navigate the Philippines with our crowdsourced Jeepney map and AI-powered commuter guide.">
-  <meta property="og:url" content="https://open-route.ph">
+  <meta property="og:url" content="https://open-route.netlify.app">
   <meta property="og:image" content="https://images.unsplash.com/photo-1518107616385-ad30221e29b9?q=80&w=1200&auto=format&fit=crop">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Open Route | Philippines Jeepney Route Helper">
+  <meta name="twitter:description" content="Crowdsourced Jeepney routes with map-based discovery and route intelligence.">
+  <meta name="twitter:image" content="https://images.unsplash.com/photo-1518107616385-ad30221e29b9?q=80&w=1200&auto=format&fit=crop">
 
   <!-- JSON-LD Structured Data for SEO -->
   <script type="application/ld+json">
@@ -87,6 +99,14 @@
 </script>
 </head>
 <body>
+  <noscript>
+    <main style="max-width: 720px; margin: 2rem auto; padding: 0 1rem; font-family: Arial, sans-serif; line-height: 1.5;">
+      <h1>Open Route: Philippines Jeepney Route Helper</h1>
+      <p>Open Route is a crowdsourced commuter guide for discovering and sharing Jeepney routes across the Philippines.</p>
+      <p>Enable JavaScript to use the interactive map, route voting, and route refinement tools.</p>
+      <p>Website: <a href="https://open-route.netlify.app">https://open-route.netlify.app</a></p>
+    </main>
+  </noscript>
   <div id="root"></div>
   <script type="module" src="index.tsx"></script>
 </body>
