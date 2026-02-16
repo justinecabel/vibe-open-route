@@ -1,5 +1,5 @@
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { JeepneyRoute, Waypoint } from '../types';
 import L from 'leaflet';
 
@@ -15,6 +15,8 @@ interface JeepneyMapProps {
   focusedPoint: Waypoint | null;
   userLocation: Waypoint | null;
 }
+
+const MIN_ZOOM_FOR_WAYPOINTS = 13;
 
 const JeepneyMap: React.FC<JeepneyMapProps> = ({ 
   routes, 
@@ -34,16 +36,18 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
   const newRoutePolylineRef = useRef<L.Polyline | null>(null);
   const focusMarkerRef = useRef<L.Marker | null>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
+  const [currentZoom, setCurrentZoom] = useState(14);
+  const [showZoomWarning, setShowZoomWarning] = useState(false);
 
   useEffect(() => {
     if (!mapRef.current) {
       const container = document.getElementById('map-container');
       if (!container) return;
 
-      // Philippines bounds to prevent wrapping
+      // Philippines bounds to prevent wrapping - includes all of Palawan (Balabac)
       const philippinesBounds = L.latLngBounds(
-        [4.6, 117.0],  // Southwest corner
-        [21.3, 129.2]  // Northeast corner
+        [3.0, 116.5],   // Southwest corner (includes Balabac, Palawan)
+        [21.3, 129.2]   // Northeast corner
       );
 
       mapRef.current = L.map(container, { 
@@ -51,6 +55,11 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
         maxBounds: philippinesBounds,
         maxBoundsViscosity: 1.0
       }).setView([14.575, 120.990], 14);
+
+      // Track zoom changes
+      mapRef.current.on('zoom', () => {
+        setCurrentZoom(mapRef.current?.getZoom() || 14);
+      });
 
       // Base layer - CartoDB with no wrapping
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
@@ -63,12 +72,19 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
   useEffect(() => {
     if (!mapRef.current) return;
     const clickHandler = (e: L.LeafletMouseEvent) => {
-      if (isAddingRoute) onWaypointAdd({ lat: e.latlng.lat, lng: e.latlng.lng });
+      if (isAddingRoute) {
+        if (currentZoom < MIN_ZOOM_FOR_WAYPOINTS) {
+          setShowZoomWarning(true);
+          setTimeout(() => setShowZoomWarning(false), 3000);
+          return;
+        }
+        onWaypointAdd({ lat: e.latlng.lat, lng: e.latlng.lng });
+      }
       else onMapClick({ lat: e.latlng.lat, lng: e.latlng.lng });
     };
     mapRef.current.on('click', clickHandler);
     return () => { mapRef.current?.off('click', clickHandler); };
-  }, [isAddingRoute, onWaypointAdd, onMapClick]);
+  }, [isAddingRoute, onWaypointAdd, onMapClick, currentZoom]);
 
   // GPS User Location - Pulsing Blue Dot
   useEffect(() => {
@@ -181,7 +197,28 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
     }
   }, [newRoutePath, newRouteWaypoints, onWaypointUpdate]);
 
-  return <div className="h-full w-full relative"><div id="map-container" className="h-full w-full" /></div>;
+  return (
+    <div className="h-full w-full relative">
+      <div id="map-container" className="h-full w-full" />
+      
+      {/* Zoom warning message */}
+      {showZoomWarning && isAddingRoute && (
+        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[3000] bg-amber-100 border-2 border-amber-400 text-amber-900 px-4 py-3 rounded-lg font-bold text-sm shadow-lg animate-in fade-in duration-200">
+          📍 Zoom in to add waypoints
+        </div>
+      )}
+
+      {/* Zoom level indicator during route creation */}
+      {isAddingRoute && (
+        <div className="fixed bottom-40 right-3 z-[999] bg-white/90 backdrop-blur-sm rounded-lg p-2 border border-slate-200 shadow-lg">
+          <p className="text-[10px] font-bold text-slate-600">Zoom: {currentZoom}/{MIN_ZOOM_FOR_WAYPOINTS}</p>
+          {currentZoom < MIN_ZOOM_FOR_WAYPOINTS && (
+            <p className="text-[9px] text-amber-600 font-semibold">↑ Zoom in to place</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default JeepneyMap;
