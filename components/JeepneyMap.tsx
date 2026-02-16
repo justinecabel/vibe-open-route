@@ -16,7 +16,7 @@ interface JeepneyMapProps {
   userLocation: Waypoint | null;
 }
 
-const MIN_ZOOM_FOR_WAYPOINTS = 13;
+const MIN_ZOOM_FOR_WAYPOINTS = 15;
 
 const JeepneyMap: React.FC<JeepneyMapProps> = ({ 
   routes, 
@@ -205,16 +205,6 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
       {showZoomWarning && isAddingRoute && (
         <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[3000] bg-amber-100 border-2 border-amber-400 text-amber-900 px-4 py-3 rounded-lg font-bold text-sm shadow-lg animate-in fade-in duration-200">
           📍 Zoom in to add waypoints
-        </div>
-      )}
-
-      {/* Zoom level indicator during route creation */}
-      {isAddingRoute && (
-        <div className="fixed bottom-40 right-3 z-[999] bg-white/90 backdrop-blur-sm rounded-lg p-2 border border-slate-200 shadow-lg">
-          <p className="text-[10px] font-bold text-slate-600">Zoom: {currentZoom}/{MIN_ZOOM_FOR_WAYPOINTS}</p>
-          {currentZoom < MIN_ZOOM_FOR_WAYPOINTS && (
-            <p className="text-[9px] text-amber-600 font-semibold">↑ Zoom in to place</p>
-          )}
         </div>
       )}
     </div>
