@@ -53,7 +53,9 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
       mapRef.current = L.map(container, { 
         zoomControl: false,
         maxBounds: philippinesBounds,
-        maxBoundsViscosity: 1.0
+        maxBoundsViscosity: 1.0,
+        maxZoom: 19,
+        minZoom: 5
       }).setView([14.575, 120.990], 14);
 
       // Track zoom changes
