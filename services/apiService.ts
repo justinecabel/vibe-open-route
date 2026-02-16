@@ -36,6 +36,38 @@ const saveLocalData = (routes: JeepneyRoute[]) => {
   localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(routes));
 };
 
+const toTimestamp = (value: unknown, fallback: number): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return fallback;
+};
+
+const normalizeRoute = (raw: any): JeepneyRoute => {
+  const now = Date.now();
+  const createdAt = toTimestamp(
+    raw?.createdAt ?? raw?.created ?? raw?.created_at,
+    now
+  );
+  const lastRefinedAt = toTimestamp(
+    raw?.lastRefinedAt ??
+      raw?.last_refined_at ??
+      raw?.refinedAt ??
+      raw?.refined ??
+      raw?.updatedAt ??
+      raw?.updated_at,
+    createdAt
+  );
+
+  return {
+    ...raw,
+    createdAt,
+    lastRefinedAt,
+  };
+};
+
 /**
  * Check if backend is connected and update connection status
  */
@@ -135,7 +167,7 @@ export const apiService = {
         throw new Error(`API unreachable: ${res.status}`);
       }
       
-      const data = await res.json();
+      const data = ((await res.json()) ?? []).map(normalizeRoute);
       saveLocalData(data);
       isBackendConnected = true;
       return data;
@@ -159,7 +191,7 @@ export const apiService = {
         mode: 'cors'
       });
       if (!res.ok) throw new Error(`Sync failed: ${res.status}`);
-      const synced = { ...(await res.json()), syncStatus: 'synced' as const };
+      const synced = { ...normalizeRoute(await res.json()), syncStatus: 'synced' as const };
       saveLocalData([...getLocalData().filter(r => r.id !== synced.id), synced]);
       return synced;
     } catch (error) {
@@ -177,7 +209,7 @@ export const apiService = {
         mode: 'cors'
       });
       if (!res.ok) throw new Error(`Vote failed: ${res.status}`);
-      return await res.json();
+      return normalizeRoute(await res.json());
     } catch (error) {
       const cache = getLocalData();
       const idx = cache.findIndex(r => r.id === id);

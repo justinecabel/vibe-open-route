@@ -7,6 +7,8 @@ import { ROUTE_COLORS } from './constants';
 import { apiService } from './services/apiService';
 import { getSnappedPath } from './services/routingService';
 
+const PUBLISH_COOLDOWN_MS = 10_000;
+
 const JeepneyIcon = (props: { className?: string }) => (
   <svg className={props.className || "w-4 h-4"} fill="currentColor" viewBox="0 0 24 24">
     <path d="M4,16c0,0.88,0.39,1.67,1,2.22V20a1,1,0,0,0,1,1H7a1,1,0,0,0,1-1V19h8v1a1,1,0,0,0,1,1h1a1,1,0,0,0,1-1V18.22c0.61-0.55,1-1.34,1-2.22V6 c0-1.52-1.03-2.74-2.42-3.1L12,2L6.42,2.9C5.03,3.26,4,4.48,4,6V16z M18,11H6V6h12V11z M16.5,17A1.5,1.5,0,1,1,18,15.5A1.5,1.5,0,0,1,16.5,17 z M7.5,17A1.5,1.5,0,1,1,9,15.5A1.5,1.5,0,0,1,7.5,17z" />
@@ -26,6 +28,17 @@ const getDistance = (p1: Waypoint, p2: [number, number]) => {
   return R * c;
 };
 
+const formatRouteDate = (timestamp?: number) => {
+  if (!timestamp || !Number.isFinite(timestamp)) return 'Unknown';
+  return new Date(timestamp).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+const normalizeRouteName = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ');
+
 const App: React.FC = () => {
   const [routes, setRoutes] = useState<JeepneyRoute[]>([]);
   const [activeRoute, setActiveRoute] = useState<JeepneyRoute | null>(null);
@@ -43,6 +56,9 @@ const App: React.FC = () => {
   const [focusedPoint, setFocusedPoint] = useState<Waypoint | null>(null);
   const [isBackendConnected, setIsBackendConnected] = useState(false);
   const [showConnectionStatus, setShowConnectionStatus] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [nowTick, setNowTick] = useState(Date.now());
   const connectionTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   
   const [votedIds, setVotedIds] = useState<Record<string, number>>(() => {
@@ -58,6 +74,11 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('vibe_user_votes', JSON.stringify(votedIds));
   }, [votedIds]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Subscribe to backend connection status changes
   useEffect(() => {
@@ -113,6 +134,15 @@ const App: React.FC = () => {
     setRoutes(data);
   };
 
+  const cloneWaypoints = (waypoints: Waypoint[]) => waypoints.map(w => ({ ...w }));
+  const cooldownRemainingSec = Math.max(0, Math.ceil((cooldownUntil - nowTick) / 1000));
+  const isCoolingDown = cooldownRemainingSec > 0;
+  const hasDuplicateRouteName = useMemo(() => {
+    if (editingId || !newRouteName.trim()) return false;
+    const normalizedDraftName = normalizeRouteName(newRouteName);
+    return routes.some(route => normalizeRouteName(route.name) === normalizedDraftName);
+  }, [editingId, newRouteName, routes]);
+
   useEffect(() => {
     if (isAddingRoute && newRouteWaypoints.length >= 2) {
       const snap = async () => {
@@ -145,26 +175,67 @@ const App: React.FC = () => {
   };
 
   const handleSave = async () => {
+    setPublishError(null);
     if (!newRouteName || !newAuthor || newRouteWaypoints.length < 2) return;
+    if (isCoolingDown) {
+      setPublishError(`Please wait ${cooldownRemainingSec}s before publishing again.`);
+      return;
+    }
+    if (hasDuplicateRouteName) {
+      setPublishError('Route name already exists. Rename it or use Refine Path.');
+      return;
+    }
+
     const now = Date.now();
+    const existingRoute = editingId ? routes.find(r => r.id === editingId) : null;
     const route: JeepneyRoute = {
       id: editingId || `route-${now}`,
       name: newRouteName,
-      author: newAuthor,
+      // Refinements keep original ownership; forks create a new contributor.
+      author: existingRoute?.author ?? newAuthor,
       waypoints: newRouteWaypoints,
       path: newRoutePath,
       color: ROUTE_COLORS[Math.floor(Math.random() * ROUTE_COLORS.length)],
-      score: 1, votes: 1, createdAt: now, lastRefinedAt: now
+      score: existingRoute?.score ?? 1,
+      votes: existingRoute?.votes ?? 1,
+      createdAt: existingRoute?.createdAt ?? now,
+      lastRefinedAt: now
     };
 
     const saved = await apiService.saveRoute(route);
     setRoutes(prev => editingId ? prev.map(r => r.id === saved.id ? saved : r) : [...prev, saved]);
+    setCooldownUntil(Date.now() + PUBLISH_COOLDOWN_MS);
+    setPublishError(null);
     setIsAddingRoute(false);
     setActiveRoute(saved);
     setEditingId(null);
     setNewRouteName('');
     setNewAuthor('');
     setNewRouteWaypoints([]);
+  };
+
+  const startRefine = (route: JeepneyRoute) => {
+    setPublishError(null);
+    setIsAddingRoute(true);
+    setIsSidebarOpen(false);
+    setEditingId(route.id);
+    setNewRouteName(route.name);
+    setNewAuthor(route.author);
+    setNewRouteWaypoints(cloneWaypoints(route.waypoints));
+    setActiveRoute(null);
+    setFocusedPoint(null);
+  };
+
+  const startFork = (route: JeepneyRoute) => {
+    setPublishError(null);
+    setIsAddingRoute(true);
+    setIsSidebarOpen(false);
+    setEditingId(null);
+    setNewRouteName(route.name);
+    setNewAuthor('');
+    setNewRouteWaypoints(cloneWaypoints(route.waypoints));
+    setActiveRoute(null);
+    setFocusedPoint(null);
   };
 
   const handleVote = async (delta: number) => {
@@ -203,6 +274,7 @@ const App: React.FC = () => {
         activeRoute={activeRoute} 
         onSelectRoute={(r) => { setActiveRoute(r); if(window.innerWidth < 1024) setIsSidebarOpen(false); }}
         onAddRouteClick={() => { 
+          setPublishError(null);
           setIsAddingRoute(true); 
           setIsSidebarOpen(false);
           setActiveRoute(null); 
@@ -313,21 +385,29 @@ const App: React.FC = () => {
                 </div>
               )}
 
-              <button 
-                onClick={() => { 
-                  setIsAddingRoute(true); 
-                  setIsSidebarOpen(false); 
-                  setEditingId(activeRoute.id); 
-                  setNewRouteName(activeRoute.name); 
-                  setNewAuthor(activeRoute.author);
-                  setNewRouteWaypoints(activeRoute.waypoints); 
-                  setActiveRoute(null); 
-                  setFocusedPoint(null);
-                }}
-                className="w-full bg-slate-100 text-indigo-950 font-black py-2.5 rounded-xl text-[9px] uppercase tracking-widest border border-indigo-100/50 hover:bg-slate-200"
-              >
-                Refine Path
-              </button>
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                <p className="text-[9px] text-slate-600 font-bold uppercase tracking-wider">
+                  Created: <span className="text-indigo-950">{formatRouteDate(activeRoute.createdAt)}</span>
+                </p>
+                <p className="text-[9px] text-slate-600 font-bold uppercase tracking-wider">
+                  Refined: <span className="text-indigo-950">{formatRouteDate(activeRoute.lastRefinedAt)}</span>
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => startRefine(activeRoute)}
+                  className="bg-slate-100 text-indigo-950 font-black py-2.5 rounded-xl text-[9px] uppercase tracking-widest border border-indigo-100/50 hover:bg-slate-200"
+                >
+                  Refine Path
+                </button>
+                <button
+                  onClick={() => startFork(activeRoute)}
+                  className="bg-indigo-100 text-indigo-950 font-black py-2.5 rounded-xl text-[9px] uppercase tracking-widest border border-indigo-200 hover:bg-indigo-200"
+                >
+                  Fork Route
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -345,16 +425,41 @@ const App: React.FC = () => {
               <div className="space-y-2">
                 <input 
                   value={newRouteName} 
-                  onChange={e => setNewRouteName(e.target.value)} 
+                  onChange={e => { setNewRouteName(e.target.value); setPublishError(null); }} 
                   placeholder="Route (e.g. PITX - Monumento)" 
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-[10px] font-bold text-indigo-950 outline-none focus:border-indigo-600"
                 />
                 <input 
                   value={newAuthor} 
-                  onChange={e => setNewAuthor(e.target.value)} 
+                  onChange={e => { setNewAuthor(e.target.value); setPublishError(null); }} 
                   placeholder="Contributor Name" 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-[10px] font-bold text-indigo-950 outline-none focus:border-indigo-600"
+                  disabled={!!editingId}
+                  className={`w-full border rounded-lg px-3 py-1.5 text-[10px] font-bold text-indigo-950 outline-none ${
+                    editingId
+                      ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
+                      : 'bg-slate-50 border-slate-200 focus:border-indigo-600'
+                  }`}
                 />
+                {editingId && (
+                  <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">
+                    Contributor is locked while refining. Use "Fork Route" to publish under your name.
+                  </p>
+                )}
+                {hasDuplicateRouteName && (
+                  <p className="text-[9px] text-rose-600 font-bold uppercase tracking-wider">
+                    Route name already exists.
+                  </p>
+                )}
+                {isCoolingDown && (
+                  <p className="text-[9px] text-amber-700 font-bold uppercase tracking-wider">
+                    Publish cooldown: {cooldownRemainingSec}s
+                  </p>
+                )}
+                {publishError && (
+                  <p className="text-[9px] text-rose-700 font-bold uppercase tracking-wider">
+                    {publishError}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -373,17 +478,17 @@ const App: React.FC = () => {
 
               <div className="bg-white p-2 rounded-xl shadow-2xl border border-slate-200 flex flex-row gap-2 md:flex-col">
                 <button 
-                  onClick={() => { setIsAddingRoute(false); setEditingId(null); setNewRouteName(''); setNewAuthor(''); setNewRouteWaypoints([]); }} 
+                  onClick={() => { setPublishError(null); setIsAddingRoute(false); setEditingId(null); setNewRouteName(''); setNewAuthor(''); setNewRouteWaypoints([]); }} 
                   className="flex-1 text-[9px] font-black text-slate-500 uppercase tracking-widest py-3 rounded-lg hover:bg-slate-50 bg-slate-50/50 min-h-12"
                 >
                   Cancel
                 </button>
                 <button 
                   onClick={handleSave} 
-                  disabled={isSnapping || newRouteWaypoints.length < 2 || !newRouteName || !newAuthor} 
+                  disabled={isSnapping || isCoolingDown || hasDuplicateRouteName || newRouteWaypoints.length < 2 || !newRouteName || !newAuthor} 
                   className="flex-[2] md:flex-1 bg-indigo-600 text-white font-black py-3 rounded-lg text-[10px] uppercase tracking-widest shadow-lg disabled:opacity-50 active:scale-95 flex items-center justify-center gap-2 min-h-12"
                 >
-                  {isSnapping ? 'Snapping...' : 'Publish'}
+                  {isSnapping ? 'Snapping...' : isCoolingDown ? `Wait ${cooldownRemainingSec}s` : 'Publish'}
                   {!isSnapping && <JeepneyIcon className="w-3.5 h-3.5" />}
                 </button>
               </div>
