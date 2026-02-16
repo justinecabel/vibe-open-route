@@ -17,6 +17,15 @@ interface JeepneyMapProps {
 }
 
 const MIN_ZOOM_FOR_WAYPOINTS = 15;
+const MAX_AUTO_FIT_ZOOM = 18;
+
+const isValidLatLng = (point: [number, number]) =>
+  Number.isFinite(point[0]) &&
+  Number.isFinite(point[1]) &&
+  point[0] >= -90 &&
+  point[0] <= 90 &&
+  point[1] >= -180 &&
+  point[1] <= 180;
 
 const JeepneyMap: React.FC<JeepneyMapProps> = ({ 
   routes, 
@@ -31,12 +40,14 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
   userLocation
 }) => {
   const mapRef = useRef<L.Map | null>(null);
-  const routeLayersRef = useRef<{ [key: string]: L.LayerGroup }>({});
+  const routeLayersRef = useRef<Record<string, { group: L.LayerGroup; polyline: L.Polyline }>>({});
+  const activeArrowMarkersRef = useRef<L.Marker[]>([]);
   const editMarkerRef = useRef<L.Marker[]>([]);
   const newRoutePolylineRef = useRef<L.Polyline | null>(null);
   const focusMarkerRef = useRef<L.Marker | null>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
-  const [currentZoom, setCurrentZoom] = useState(14);
+  const zoomWarningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previousActiveRouteIdRef = useRef<string | null>(null);
   const [showZoomWarning, setShowZoomWarning] = useState(false);
 
   useEffect(() => {
@@ -58,35 +69,64 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
         minZoom: 5
       }).setView([14.575, 120.990], 14);
 
-      // Track zoom changes
-      mapRef.current.on('zoom', () => {
-        setCurrentZoom(mapRef.current?.getZoom() || 14);
-      });
-
       // Base layer - CartoDB with no wrapping
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; CARTO',
+        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+        maxZoom: 20,
+        maxNativeZoom: 20,
         noWrap: true
       }).addTo(mapRef.current);
+
+      // Prevent white gaps after layout/viewport changes.
+      mapRef.current.whenReady(() => {
+        mapRef.current?.invalidateSize();
+      });
     }
+
+    return () => {
+      if (zoomWarningTimeoutRef.current) {
+        clearTimeout(zoomWarningTimeoutRef.current);
+      }
+      mapRef.current?.remove();
+      mapRef.current = null;
+      routeLayersRef.current = {};
+      activeArrowMarkersRef.current = [];
+      editMarkerRef.current = [];
+      newRoutePolylineRef.current = null;
+      focusMarkerRef.current = null;
+      userMarkerRef.current = null;
+    };
   }, []);
 
   useEffect(() => {
-    if (!mapRef.current) return;
+    const map = mapRef.current;
+    if (!map) return;
     const clickHandler = (e: L.LeafletMouseEvent) => {
       if (isAddingRoute) {
-        if (currentZoom < MIN_ZOOM_FOR_WAYPOINTS) {
+        if (map.getZoom() < MIN_ZOOM_FOR_WAYPOINTS) {
           setShowZoomWarning(true);
-          setTimeout(() => setShowZoomWarning(false), 3000);
+          if (zoomWarningTimeoutRef.current) {
+            clearTimeout(zoomWarningTimeoutRef.current);
+          }
+          zoomWarningTimeoutRef.current = setTimeout(() => setShowZoomWarning(false), 3000);
           return;
         }
         onWaypointAdd({ lat: e.latlng.lat, lng: e.latlng.lng });
       }
       else onMapClick({ lat: e.latlng.lat, lng: e.latlng.lng });
     };
-    mapRef.current.on('click', clickHandler);
-    return () => { mapRef.current?.off('click', clickHandler); };
-  }, [isAddingRoute, onWaypointAdd, onMapClick, currentZoom]);
+    map.on('click', clickHandler);
+    return () => { map.off('click', clickHandler); };
+  }, [isAddingRoute, onWaypointAdd, onMapClick]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const handleResize = () => map.invalidateSize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // GPS User Location - Pulsing Blue Dot
   useEffect(() => {
@@ -134,27 +174,48 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
 
   useEffect(() => {
     if (!mapRef.current) return;
-    
-    // Clear existing route layers from the map
-    (Object.values(routeLayersRef.current) as L.LayerGroup[]).forEach(g => g.remove());
-    routeLayersRef.current = {};
+    const map = mapRef.current;
+    const activeRouteId = activeRoute?.id ?? null;
+    const nextRouteIds = new Set(routes.map(route => route.id));
+
+    Object.entries(routeLayersRef.current).forEach(([routeId, layer]) => {
+      if (!nextRouteIds.has(routeId)) {
+        layer.group.remove();
+        delete routeLayersRef.current[routeId];
+      }
+    });
+
+    activeArrowMarkersRef.current.forEach(marker => marker.remove());
+    activeArrowMarkersRef.current = [];
 
     routes.forEach(route => {
-      const group = L.layerGroup().addTo(mapRef.current!);
       const isActive = route.id === activeRoute?.id;
-      const polyline = L.polyline(route.path, { 
-        color: route.color, weight: isActive ? 8 : 3, opacity: isActive ? 1 : 0.4
-      }).addTo(group);
+      const safePath = route.path.filter(isValidLatLng);
+      let layer = routeLayersRef.current[route.id];
 
-      if (isActive) polyline.bringToFront();
+      if (!layer) {
+        const group = L.layerGroup().addTo(map);
+        const polyline = L.polyline(safePath).addTo(group);
+        layer = { group, polyline };
+        routeLayersRef.current[route.id] = layer;
+      }
 
-      if (isActive && route.path.length > 1) {
-        const step = Math.max(5, Math.floor(route.path.length / 10));
-        for (let i = 0; i < route.path.length - 1; i += step) {
-          const p1 = route.path[i];
-          const p2 = route.path[i + 1];
+      layer.polyline.setLatLngs(safePath);
+      layer.polyline.setStyle({
+        color: route.color,
+        weight: isActive ? 8 : 3,
+        opacity: isActive ? 1 : 0.4
+      });
+
+      if (isActive) layer.polyline.bringToFront();
+
+      if (isActive && safePath.length > 1) {
+        const step = Math.max(5, Math.floor(safePath.length / 10));
+        for (let i = 0; i < safePath.length - 1; i += step) {
+          const p1 = safePath[i];
+          const p2 = safePath[i + 1];
           const angle = (Math.atan2(p2[1] - p1[1], p2[0] - p1[0]) * 180) / Math.PI;
-          L.marker(p1, {
+          const arrowMarker = L.marker(p1, {
             icon: L.divIcon({
               className: 'custom-arrow',
               html: `<div style="transform: rotate(${angle}deg); color: white; width: 14px; height: 14px;">
@@ -164,12 +225,22 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
               iconAnchor: [7, 7]
             }),
             interactive: false
-          }).addTo(group);
+          }).addTo(layer.group);
+          activeArrowMarkersRef.current.push(arrowMarker);
         }
       }
-      routeLayersRef.current[route.id] = group;
-      if (isActive) mapRef.current?.fitBounds(polyline.getBounds(), { padding: [50, 50], animate: true });
     });
+
+    if (activeRouteId && activeRouteId !== previousActiveRouteIdRef.current) {
+      const activeLayer = routeLayersRef.current[activeRouteId];
+      if (activeLayer) {
+        const bounds = activeLayer.polyline.getBounds();
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [50, 50], animate: true, maxZoom: MAX_AUTO_FIT_ZOOM });
+        }
+      }
+    }
+    previousActiveRouteIdRef.current = activeRouteId;
   }, [routes, activeRoute]);
 
   useEffect(() => {
@@ -206,7 +277,7 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
       {/* Zoom warning message */}
       {showZoomWarning && isAddingRoute && (
         <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[3000] bg-amber-100 border-2 border-amber-400 text-amber-900 px-4 py-3 rounded-lg font-bold text-sm shadow-lg animate-in fade-in duration-200">
-          📍 Zoom in to add waypoints
+          Zoom in to add waypoints
         </div>
       )}
     </div>
