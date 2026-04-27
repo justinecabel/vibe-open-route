@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import JeepneyMap from './components/JeepneyMap';
 import RouteSidebar from './components/RouteSidebar';
 import { JeepneyRoute, Waypoint, GeminiAnalysis } from './types';
@@ -10,6 +10,9 @@ import { getSnappedPath } from './services/routingService';
 const PUBLISH_COOLDOWN_MS = 10_000;
 const NEARBY_ROUTE_RADIUS_M = 2_000;
 const CONNECTING_ROUTE_RADIUS_M = 900;
+const ROUTE_HOP_DISTANCE_M = 420;
+const MAX_HOP_BOARDING_DISTANCE_M = 700;
+const MAX_HOP_TRANSFER_DISTANCE_M = 700;
 
 type ThemeMode = 'auto' | 'light' | 'dark';
 type SearchStatus = 'idle' | 'searching' | 'found' | 'empty' | 'error';
@@ -38,6 +41,14 @@ const CompassIcon = (props: { className?: string; rotation?: number }) => (
   >
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" d="M12 3.5 16.5 20 12 17.5 7.5 20 12 3.5z" />
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" d="M12 8.25v5.5" />
+  </svg>
+);
+
+const TargetIcon = (props: { className?: string }) => (
+  <svg className={props.className || "w-5 h-5"} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="7.25" strokeWidth="2.2" />
+    <circle cx="12" cy="12" r="2.5" strokeWidth="2.2" />
+    <path strokeLinecap="round" strokeWidth="2.2" d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2" />
   </svg>
 );
 
@@ -127,6 +138,33 @@ const getNearestRoutePoint = (origin: Waypoint, route: JeepneyRoute): { point: W
   return { point: nearest, distance: nearestDistance };
 };
 
+const getNearestRouteTransfer = (
+  connectorRoute: JeepneyRoute,
+  targetRoute: JeepneyRoute,
+): { connectorPoint: Waypoint; targetPoint: Waypoint; distance: number } | null => {
+  const connectorPath = connectorRoute.path.filter(coord => Number.isFinite(coord[0]) && Number.isFinite(coord[1]));
+  const targetPath = targetRoute.path.filter(coord => Number.isFinite(coord[0]) && Number.isFinite(coord[1]));
+  if (!connectorPath.length || !targetPath.length) return null;
+
+  let bestTransfer: { connectorPoint: Waypoint; targetPoint: Waypoint; distance: number } | null = null;
+
+  connectorPath.forEach(coord => {
+    const connectorPoint = { lat: coord[0], lng: coord[1] };
+    const nearestTargetPoint = getNearestRoutePoint(connectorPoint, targetRoute);
+    if (!nearestTargetPoint) return;
+
+    if (!bestTransfer || nearestTargetPoint.distance < bestTransfer.distance) {
+      bestTransfer = {
+        connectorPoint,
+        targetPoint: nearestTargetPoint.point,
+        distance: nearestTargetPoint.distance,
+      };
+    }
+  });
+
+  return bestTransfer;
+};
+
 const formatRouteDate = (timestamp?: number) => {
   if (!timestamp || !Number.isFinite(timestamp)) return 'Unknown';
   return new Date(timestamp).toLocaleDateString(undefined, {
@@ -154,6 +192,8 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [focusedPoint, setFocusedPoint] = useState<Waypoint | null>(null);
   const [focusedPointSource, setFocusedPointSource] = useState<'map' | 'search' | null>(null);
+  const [isPointPickerActive, setIsPointPickerActive] = useState(false);
+  const [routeGuidePath, setRouteGuidePath] = useState<[number, number][]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchStatus, setSearchStatus] = useState<SearchStatus>('idle');
   const [searchLabel, setSearchLabel] = useState<string | null>(null);
@@ -320,6 +360,7 @@ const App: React.FC = () => {
           return;
         }
 
+        setIsPointPickerActive(false);
         setFocusedPoint(point);
         setFocusedPointSource('search');
         setSearchLabel(getShortPlaceLabel(match.display_name || query));
@@ -457,6 +498,7 @@ const App: React.FC = () => {
     setNewAuthor(route.author);
     setNewRouteWaypoints(cloneWaypoints(route.waypoints));
     setActiveRoute(null);
+    setIsPointPickerActive(false);
     setFocusedPoint(null);
     setFocusedPointSource(null);
   };
@@ -470,6 +512,7 @@ const App: React.FC = () => {
     setNewAuthor('');
     setNewRouteWaypoints(cloneWaypoints(route.waypoints));
     setActiveRoute(null);
+    setIsPointPickerActive(false);
     setFocusedPoint(null);
     setFocusedPointSource(null);
   };
@@ -485,9 +528,37 @@ const App: React.FC = () => {
     setVotedIds(prev => ({ ...prev, [activeRoute.id]: delta === currentVote ? 0 : delta }));
   };
 
-  const selectRoute = (route: JeepneyRoute) => {
+  const selectRoute = useCallback((route: JeepneyRoute) => {
+    setIsPointPickerActive(false);
     setActiveRoute(route);
     if (isCompactViewport()) setIsSidebarOpen(false);
+  }, []);
+
+  const handlePointPickerMove = useCallback((point: Waypoint) => {
+    setFocusedPoint(point);
+    setFocusedPointSource('map');
+  }, []);
+
+  const beginPointPicker = () => {
+    setActiveRoute(null);
+    setIsPointPickerActive(true);
+    setFocusedPointSource('map');
+    setSearchQuery('');
+    setSearchStatus('idle');
+    setSearchLabel(null);
+    setRouteGuidePath([]);
+    if (isCompactViewport()) setIsSidebarOpen(false);
+  };
+
+  const cancelPointPicker = () => {
+    setIsPointPickerActive(false);
+    setFocusedPoint(null);
+    setFocusedPointSource(null);
+  };
+
+  const confirmPointPicker = () => {
+    setIsPointPickerActive(false);
+    if (isCompactViewport()) setIsSidebarOpen(true);
   };
 
   const returnToRouteList = () => {
@@ -496,6 +567,8 @@ const App: React.FC = () => {
   };
 
   const clearFocusedFilter = () => {
+    setIsPointPickerActive(false);
+    setRouteGuidePath([]);
     setFocusedPoint(null);
     setFocusedPointSource(null);
     setSearchQuery('');
@@ -570,15 +643,74 @@ const App: React.FC = () => {
   }, [filteredRoutes, focusedPoint, routes, userLocation]);
 
   const isPlaceSearchActive = focusedPointSource === 'search' && searchQuery.trim().length >= 3;
-  const canShowNearbyRoutes = locationStatus === 'granted' || isPlaceSearchActive;
+  const isPickedPointActive = focusedPointSource === 'map' && !!focusedPoint;
+  const canShowNearbyRoutes = locationStatus === 'granted' || isPlaceSearchActive || isPickedPointActive;
   const canUseHeadingMode = locationStatus === 'granted' && !!userLocation;
   const resolvedTheme = themeMode === 'auto' ? systemTheme : themeMode;
-  const routeGuideOrigin = userLocation ?? (focusedPointSource === 'search' ? focusedPoint : null);
+  const routeGuideOrigin = userLocation ?? focusedPoint;
   const routeGuideTarget = activeRoute && routeGuideOrigin ? getNearestRoutePoint(routeGuideOrigin, activeRoute) : null;
+  const connectionPlan = useMemo(() => {
+    if (!activeRoute || !routeGuideOrigin || !routeGuideTarget || routeGuideTarget.distance <= ROUTE_HOP_DISTANCE_M) {
+      return null;
+    }
+
+    return routes
+      .filter(route => route.id !== activeRoute.id)
+      .map(route => {
+        const boarding = getNearestRoutePoint(routeGuideOrigin, route);
+        const transfer = getNearestRouteTransfer(route, activeRoute);
+        if (!boarding || !transfer) return null;
+        if (boarding.distance > MAX_HOP_BOARDING_DISTANCE_M || transfer.distance > MAX_HOP_TRANSFER_DISTANCE_M) return null;
+
+        return {
+          connectorRoute: route,
+          boardingPoint: boarding.point,
+          dropoffPoint: transfer.connectorPoint,
+          targetPoint: transfer.targetPoint,
+          boardingDistance: boarding.distance,
+          transferDistance: transfer.distance,
+          score: boarding.distance + transfer.distance,
+        };
+      })
+      .filter((plan): plan is NonNullable<typeof plan> => plan !== null)
+      .sort((a, b) => a.score - b.score)[0] ?? null;
+  }, [activeRoute, routeGuideOrigin, routeGuideTarget, routes]);
+
+  const routeGuideDestination = connectionPlan?.boardingPoint ?? routeGuideTarget?.point ?? null;
   const routeGuide = routeGuideTarget && routeGuideOrigin
-    ? { from: routeGuideOrigin, to: routeGuideTarget.point }
+    ? {
+      from: routeGuideOrigin,
+      to: routeGuideDestination ?? routeGuideTarget.point,
+      path: routeGuidePath,
+      label: connectionPlan ? `Board ${connectionPlan.connectorRoute.name}` : 'Nearest point on selected route',
+    }
     : null;
   const routeGuideDistance = routeGuideTarget ? Math.round(routeGuideTarget.distance) : null;
+  const routeConnectionPlan = connectionPlan
+    ? {
+      connectorRouteId: connectionPlan.connectorRoute.id,
+      boardingPoint: connectionPlan.boardingPoint,
+      dropoffPoint: connectionPlan.dropoffPoint,
+      label: `Hop on ${connectionPlan.connectorRoute.name}`,
+    }
+    : null;
+
+  useEffect(() => {
+    if (!routeGuideOrigin || !routeGuideDestination) {
+      setRouteGuidePath([]);
+      return;
+    }
+
+    let isCancelled = false;
+    setRouteGuidePath([]);
+    getSnappedPath([routeGuideOrigin, routeGuideDestination]).then(path => {
+      if (!isCancelled) setRouteGuidePath(path);
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [routeGuideOrigin?.lat, routeGuideOrigin?.lng, routeGuideDestination?.lat, routeGuideDestination?.lng]);
 
   return (
     <div className={`flex h-dvh w-full font-sans overflow-hidden relative text-sm antialiased ${
@@ -601,6 +733,7 @@ const App: React.FC = () => {
           setPublishError(null);
           setIsAddingRoute(true); 
           setIsSidebarOpen(false);
+          setIsPointPickerActive(false);
           setActiveRoute(null); 
           setEditingId(null); 
           setNewRouteName(''); 
@@ -654,8 +787,47 @@ const App: React.FC = () => {
           onRouteSelect={selectRoute} newRouteWaypoints={newRouteWaypoints} newRoutePath={newRoutePath}
           focusedPoint={focusedPoint} userLocation={userLocation}
           centerOnUserLocationRequest={centerOnUserLocationRequest}
+          isPointPickerActive={isPointPickerActive}
+          onPointPickerMove={handlePointPickerMove}
+          isHeadingMode={isHeadingMode}
+          heading={heading}
           mapTheme={resolvedTheme} routeGuide={routeGuide}
+          connectionPlan={routeConnectionPlan}
         />
+
+        {!isAddingRoute && !activeRoute && (
+          <button
+            onClick={isPointPickerActive ? cancelPointPicker : beginPointPicker}
+            className={`fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+6.25rem)] z-[1200] h-11 w-11 rounded-full shadow-[0_10px_28px_rgba(15,23,42,0.16)] border backdrop-blur-md active:scale-95 transition-all items-center justify-center ${
+              isSidebarOpen ? 'hidden lg:flex' : 'flex'
+            } ${
+              isPointPickerActive
+                ? 'bg-amber-300 text-slate-950 border-amber-400'
+                : 'bg-white/90 text-slate-950 border-white/80'
+            }`}
+            aria-label={isPointPickerActive ? 'Cancel center point picker' : 'Pick routes from map center'}
+            title={isPointPickerActive ? 'Cancel point picker' : 'Pick routes from map center'}
+          >
+            <TargetIcon className="h-[18px] w-[18px]" />
+          </button>
+        )}
+
+        {isPointPickerActive && !isAddingRoute && !activeRoute && (
+          <div className="fixed left-1/2 bottom-[calc(env(safe-area-inset-bottom)+2.75rem)] z-[1600] -translate-x-1/2 flex items-center gap-2 rounded-full bg-white/95 p-1 shadow-[0_14px_36px_rgba(15,23,42,0.18)] border border-white/80 backdrop-blur-md">
+            <button
+              onClick={cancelPointPicker}
+              className="h-10 px-4 rounded-full text-xs font-black uppercase tracking-wider text-slate-500 active:scale-95"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmPointPicker}
+              className="h-10 px-5 rounded-full bg-slate-950 text-white text-xs font-black uppercase tracking-wider active:scale-95"
+            >
+              Use point
+            </button>
+          </div>
+        )}
 
         {!isAddingRoute && !activeRoute && (
           <div className={`fixed left-4 lg:left-[calc(20rem+1rem)] bottom-[calc(env(safe-area-inset-bottom)+2.75rem)] z-[1200] h-11 rounded-full bg-white/90 text-slate-950 shadow-[0_10px_28px_rgba(15,23,42,0.16)] border border-white/80 backdrop-blur-md p-1 items-center gap-1 ${
@@ -756,11 +928,13 @@ const App: React.FC = () => {
                   : 'bg-amber-50 border-amber-100 text-amber-900'
               }`}>
                 <p className="text-[11px] font-black uppercase tracking-wider">
-                  {routeGuide ? 'Waypoint guide active' : 'Waypoint guide needs location'}
+                  {routeConnectionPlan ? 'Jeepney hop suggested' : routeGuide ? 'Waypoint guide active' : 'Waypoint guide needs location'}
                 </p>
                 <p className="mt-1 text-xs font-semibold leading-snug">
-                  {routeGuide && routeGuideDistance !== null
-                    ? `${routeGuideDistance}m to the nearest point on this route. Follow the dashed line to meet the jeepney path.`
+                  {routeConnectionPlan && connectionPlan
+                    ? `Walk to ${connectionPlan.connectorRoute.name}, ride it, then drop off at the labeled transfer point to connect with this route.`
+                    : routeGuide && routeGuideDistance !== null
+                    ? `${routeGuideDistance}m to the nearest point on this route. Follow the street-routed guide to meet the jeepney path.`
                     : 'Enable location to draw a guide from you to the nearest point on this selected route.'}
                 </p>
               </div>

@@ -88,6 +88,57 @@
       border: 4px solid #facc15;
       box-shadow: 0 8px 20px rgba(15, 23, 42, 0.28);
     }
+    .route-transfer-label {
+      display: inline-flex;
+      min-width: max-content;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 0.35rem 0.55rem;
+      font-size: 10px;
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: 0;
+      text-transform: uppercase;
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.28);
+      border: 2px solid white;
+      white-space: nowrap;
+    }
+    .route-transfer-board { background: #facc15; color: #020617; }
+    .route-transfer-drop { background: #f97316; color: white; }
+    .route-center-picker {
+      position: relative;
+      width: 46px;
+      height: 46px;
+      border-radius: 999px;
+      border: 2px solid rgba(2, 6, 23, 0.9);
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+    }
+    .route-center-picker::before,
+    .route-center-picker::after {
+      content: '';
+      position: absolute;
+      background: #020617;
+      border-radius: 999px;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .route-center-picker::before { width: 28px; height: 2px; }
+    .route-center-picker::after { width: 2px; height: 28px; }
+    .route-center-picker-dot {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      transform: translate(-50%, -50%);
+      border-radius: 999px;
+      background: #f97316;
+      border: 2px solid white;
+      z-index: 1;
+    }
     @keyframes ping { 75%, 100% { transform: scale(2.5); opacity: 0; } }
   </style>
   <script type="importmap">

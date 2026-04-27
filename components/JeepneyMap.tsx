@@ -15,8 +15,18 @@ interface JeepneyMapProps {
   focusedPoint: Waypoint | null;
   userLocation: Waypoint | null;
   centerOnUserLocationRequest: number;
+  isPointPickerActive: boolean;
+  onPointPickerMove: (point: Waypoint) => void;
+  isHeadingMode: boolean;
+  heading: number;
   mapTheme: 'light' | 'dark';
-  routeGuide: { from: Waypoint; to: Waypoint } | null;
+  routeGuide: { from: Waypoint; to: Waypoint; path: [number, number][]; label?: string } | null;
+  connectionPlan: {
+    connectorRouteId: string;
+    boardingPoint: Waypoint;
+    dropoffPoint: Waypoint;
+    label: string;
+  } | null;
 }
 
 const MIN_ZOOM_FOR_WAYPOINTS = 17;
@@ -68,8 +78,13 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
   focusedPoint,
   userLocation,
   centerOnUserLocationRequest,
+  isPointPickerActive,
+  onPointPickerMove,
+  isHeadingMode,
+  heading,
   mapTheme,
-  routeGuide
+  routeGuide,
+  connectionPlan
 }) => {
   const mapRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
@@ -78,6 +93,7 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
   const editMarkerRef = useRef<L.Marker[]>([]);
   const newRoutePolylineRef = useRef<L.Polyline | null>(null);
   const routeGuideRef = useRef<L.LayerGroup | null>(null);
+  const connectionLayerRef = useRef<L.LayerGroup | null>(null);
   const focusMarkerRef = useRef<L.Marker | null>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
   const zoomWarningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -123,6 +139,7 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
       newRoutePolylineRef.current = null;
       tileLayerRef.current = null;
       routeGuideRef.current = null;
+      connectionLayerRef.current = null;
       focusMarkerRef.current = null;
       userMarkerRef.current = null;
     };
@@ -132,6 +149,30 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
     if (!mapRef.current || !tileLayerRef.current) return;
     tileLayerRef.current.setUrl(getTileUrl(mapTheme));
   }, [mapTheme]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const mapPane = map?.getPane('mapPane');
+    if (!map || !mapPane) return;
+
+    const applyRotation = () => {
+      const baseTransform = mapPane.style.transform.replace(/\s*rotate\([^)]*\)/, '');
+      mapPane.style.transformOrigin = '50% 50%';
+      mapPane.style.transform = isHeadingMode
+        ? `${baseTransform} rotate(${-heading}deg)`
+        : baseTransform;
+    };
+
+    applyRotation();
+    map.on('move zoom zoomanim moveend zoomend', applyRotation);
+    return () => {
+      map.off('move zoom zoomanim moveend zoomend', applyRotation);
+      const nextMapPane = map.getPane('mapPane');
+      if (nextMapPane) {
+        nextMapPane.style.transform = nextMapPane.style.transform.replace(/\s*rotate\([^)]*\)/, '');
+      }
+    };
+  }, [heading, isHeadingMode]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -152,6 +193,22 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
     map.on('click', clickHandler);
     return () => { map.off('click', clickHandler); };
   }, [isAddingRoute, onWaypointAdd]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isPointPickerActive) return;
+
+    const emitCenter = () => {
+      const center = map.getCenter();
+      onPointPickerMove({ lat: center.lat, lng: center.lng });
+    };
+
+    emitCenter();
+    map.on('moveend', emitCenter);
+    return () => {
+      map.off('moveend', emitCenter);
+    };
+  }, [isPointPickerActive, onPointPickerMove]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -202,18 +259,14 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
     if (!routeGuide || isAddingRoute) return;
 
     const guideGroup = L.layerGroup().addTo(mapRef.current);
-    L.polyline(
-      [
-        [routeGuide.from.lat, routeGuide.from.lng],
-        [routeGuide.to.lat, routeGuide.to.lng],
-      ],
-      {
+    if (routeGuide.path.length >= 2) {
+      L.polyline(routeGuide.path, {
         color: '#0f172a',
         dashArray: '7, 10',
         weight: 4,
         opacity: 0.78,
-      }
-    ).addTo(guideGroup);
+      }).addTo(guideGroup);
+    }
 
     L.marker([routeGuide.to.lat, routeGuide.to.lng], {
       icon: L.divIcon({
@@ -228,12 +281,56 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
     routeGuideRef.current = guideGroup;
   }, [routeGuide, isAddingRoute]);
 
+  useEffect(() => {
+    if (!mapRef.current) return;
+    if (connectionLayerRef.current) {
+      connectionLayerRef.current.remove();
+      connectionLayerRef.current = null;
+    }
+
+    if (!connectionPlan || isAddingRoute) return;
+
+    const connectorRoute = routes.find(route => route.id === connectionPlan.connectorRouteId);
+    const connectionGroup = L.layerGroup().addTo(mapRef.current);
+
+    if (connectorRoute) {
+      L.polyline(connectorRoute.path.filter(isValidLatLng), {
+        color: connectorRoute.color,
+        weight: 7,
+        opacity: 0.85,
+        dashArray: '12, 8',
+      }).addTo(connectionGroup);
+    }
+
+    L.marker([connectionPlan.boardingPoint.lat, connectionPlan.boardingPoint.lng], {
+      icon: L.divIcon({
+        className: 'custom-div-icon',
+        html: `<div class="route-transfer-label route-transfer-board">Board</div>`,
+        iconSize: [62, 28],
+        iconAnchor: [31, 14],
+      }),
+      zIndexOffset: 1250,
+    }).addTo(connectionGroup);
+
+    L.marker([connectionPlan.dropoffPoint.lat, connectionPlan.dropoffPoint.lng], {
+      icon: L.divIcon({
+        className: 'custom-div-icon',
+        html: `<div class="route-transfer-label route-transfer-drop">Drop off</div>`,
+        iconSize: [82, 28],
+        iconAnchor: [41, 14],
+      }),
+      zIndexOffset: 1260,
+    }).addTo(connectionGroup);
+
+    connectionLayerRef.current = connectionGroup;
+  }, [connectionPlan, isAddingRoute, routes]);
+
   // Focused / Drop-off Point - Distinct Orange/Red Pin
   useEffect(() => {
     if (!mapRef.current) return;
     if (focusMarkerRef.current) focusMarkerRef.current.remove();
     
-    if (focusedPoint && !isAddingRoute) {
+    if (focusedPoint && !isAddingRoute && !isPointPickerActive) {
       focusMarkerRef.current = L.marker([focusedPoint.lat, focusedPoint.lng], {
         icon: L.divIcon({
           className: 'custom-div-icon focused-pin',
@@ -249,7 +346,7 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
         zIndexOffset: 1001
       }).addTo(mapRef.current);
     }
-  }, [focusedPoint, isAddingRoute]);
+  }, [focusedPoint, isAddingRoute, isPointPickerActive]);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -300,8 +397,9 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
       });
       layer.hitbox.off('click');
       layer.hitbox.on('click', event => {
+        if (isAddingRoute) return;
         L.DomEvent.stopPropagation(event);
-        if (!isAddingRoute) onRouteSelect(route);
+        onRouteSelect(route);
       });
 
       if (isActive) {
@@ -376,6 +474,14 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
         id="map-container"
         className="h-full w-full"
       />
+
+      {isPointPickerActive && !isAddingRoute && (
+        <div className="pointer-events-none fixed inset-0 z-[1500] flex items-center justify-center">
+          <div className="route-center-picker" aria-hidden="true">
+            <div className="route-center-picker-dot" />
+          </div>
+        </div>
+      )}
       
       {/* Zoom warning message */}
       {showZoomWarning && isAddingRoute && (

@@ -4,11 +4,11 @@ import { Waypoint } from "../types";
 /**
  * Fetches a road-aligned path between multiple waypoints using OSRM.
  */
-export const getSnappedPath = async (waypoints: Waypoint[]): Promise<[number, number][]> => {
+export const getSnappedPath = async (waypoints: Waypoint[], profile: 'driving' | 'walking' = 'driving'): Promise<[number, number][]> => {
   if (waypoints.length < 2) return waypoints.map(w => [w.lat, w.lng]);
 
   const coordinates = waypoints.map(w => `${w.lng},${w.lat}`).join(';');
-  const url = `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`;
+  const url = `https://router.project-osrm.org/route/v1/${profile}/${coordinates}?overview=full&geometries=geojson`;
 
   try {
     const response = await fetch(url);
