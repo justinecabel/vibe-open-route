@@ -9,15 +9,44 @@ interface JeepneyMapProps {
   isAddingRoute: boolean;
   onWaypointAdd: (point: Waypoint) => void;
   onWaypointUpdate: (index: number, point: Waypoint) => void;
-  onMapClick: (point: Waypoint) => void;
+  onRouteSelect: (route: JeepneyRoute) => void;
   newRouteWaypoints: Waypoint[];
   newRoutePath: [number, number][];
   focusedPoint: Waypoint | null;
   userLocation: Waypoint | null;
+  centerOnUserLocationRequest: number;
+  mapTheme: 'light' | 'dark';
+  routeGuide: { from: Waypoint; to: Waypoint } | null;
 }
 
 const MIN_ZOOM_FOR_WAYPOINTS = 17;
 const MAX_AUTO_FIT_ZOOM = 18;
+
+const getTileUrl = (theme: 'light' | 'dark') =>
+  theme === 'dark'
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+
+const getTileOptions = (): L.TileLayerOptions => ({
+  attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+  maxZoom: 20,
+  maxNativeZoom: 20,
+  noWrap: true,
+});
+
+const getRouteFitOptions = (): L.FitBoundsOptions => {
+  if (typeof window === 'undefined' || window.innerWidth >= 768) {
+    return { padding: [56, 56], animate: true, maxZoom: MAX_AUTO_FIT_ZOOM };
+  }
+
+  const bottomSheetSpace = Math.round(window.innerHeight * 0.52);
+  return {
+    paddingTopLeft: [48, 112],
+    paddingBottomRight: [48, bottomSheetSpace],
+    animate: true,
+    maxZoom: 17,
+  };
+};
 
 const isValidLatLng = (point: [number, number]) =>
   Number.isFinite(point[0]) &&
@@ -33,17 +62,22 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
   isAddingRoute, 
   onWaypointAdd,
   onWaypointUpdate,
-  onMapClick,
+  onRouteSelect,
   newRouteWaypoints,
   newRoutePath,
   focusedPoint,
-  userLocation
+  userLocation,
+  centerOnUserLocationRequest,
+  mapTheme,
+  routeGuide
 }) => {
   const mapRef = useRef<L.Map | null>(null);
-  const routeLayersRef = useRef<Record<string, { group: L.LayerGroup; polyline: L.Polyline }>>({});
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const routeLayersRef = useRef<Record<string, { group: L.LayerGroup; polyline: L.Polyline; hitbox: L.Polyline }>>({});
   const activeArrowMarkersRef = useRef<L.Marker[]>([]);
   const editMarkerRef = useRef<L.Marker[]>([]);
   const newRoutePolylineRef = useRef<L.Polyline | null>(null);
+  const routeGuideRef = useRef<L.LayerGroup | null>(null);
   const focusMarkerRef = useRef<L.Marker | null>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
   const zoomWarningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -69,13 +103,7 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
         minZoom: 5
       }).setView([14.575, 120.990], 14);
 
-      // Base layer - CartoDB with no wrapping
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-        maxZoom: 20,
-        maxNativeZoom: 20,
-        noWrap: true
-      }).addTo(mapRef.current);
+      tileLayerRef.current = L.tileLayer(getTileUrl(mapTheme), getTileOptions()).addTo(mapRef.current);
 
       // Prevent white gaps after layout/viewport changes.
       mapRef.current.whenReady(() => {
@@ -93,10 +121,17 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
       activeArrowMarkersRef.current = [];
       editMarkerRef.current = [];
       newRoutePolylineRef.current = null;
+      tileLayerRef.current = null;
+      routeGuideRef.current = null;
       focusMarkerRef.current = null;
       userMarkerRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!mapRef.current || !tileLayerRef.current) return;
+    tileLayerRef.current.setUrl(getTileUrl(mapTheme));
+  }, [mapTheme]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -113,11 +148,10 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
         }
         onWaypointAdd({ lat: e.latlng.lat, lng: e.latlng.lng });
       }
-      else onMapClick({ lat: e.latlng.lat, lng: e.latlng.lng });
     };
     map.on('click', clickHandler);
     return () => { map.off('click', clickHandler); };
-  }, [isAddingRoute, onWaypointAdd, onMapClick]);
+  }, [isAddingRoute, onWaypointAdd]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -148,6 +182,51 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
        mapRef.current.setView([userLocation.lat, userLocation.lng], 15);
     }
   }, [userLocation]);
+
+  useEffect(() => {
+    if (!mapRef.current || !userLocation || centerOnUserLocationRequest === 0) return;
+    const nextZoom = Math.max(mapRef.current.getZoom(), 16);
+    mapRef.current.flyTo([userLocation.lat, userLocation.lng], nextZoom, {
+      animate: true,
+      duration: 0.45,
+    });
+  }, [centerOnUserLocationRequest, userLocation]);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    if (routeGuideRef.current) {
+      routeGuideRef.current.remove();
+      routeGuideRef.current = null;
+    }
+
+    if (!routeGuide || isAddingRoute) return;
+
+    const guideGroup = L.layerGroup().addTo(mapRef.current);
+    L.polyline(
+      [
+        [routeGuide.from.lat, routeGuide.from.lng],
+        [routeGuide.to.lat, routeGuide.to.lng],
+      ],
+      {
+        color: '#0f172a',
+        dashArray: '7, 10',
+        weight: 4,
+        opacity: 0.78,
+      }
+    ).addTo(guideGroup);
+
+    L.marker([routeGuide.to.lat, routeGuide.to.lng], {
+      icon: L.divIcon({
+        className: 'custom-div-icon',
+        html: `<div class="route-guide-target"></div>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9],
+      }),
+      zIndexOffset: 1100,
+    }).addTo(guideGroup);
+
+    routeGuideRef.current = guideGroup;
+  }, [routeGuide, isAddingRoute]);
 
   // Focused / Drop-off Point - Distinct Orange/Red Pin
   useEffect(() => {
@@ -196,18 +275,39 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
       if (!layer) {
         const group = L.layerGroup().addTo(map);
         const polyline = L.polyline(safePath).addTo(group);
-        layer = { group, polyline };
+        const hitbox = L.polyline(safePath, {
+          color: route.color,
+          weight: 18,
+          opacity: 0,
+          interactive: true,
+        }).addTo(group);
+        layer = { group, polyline, hitbox };
         routeLayersRef.current[route.id] = layer;
       }
 
       layer.polyline.setLatLngs(safePath);
+      layer.hitbox.setLatLngs(safePath);
       layer.polyline.setStyle({
         color: route.color,
         weight: isActive ? 8 : 3,
         opacity: isActive ? 1 : 0.4
       });
+      layer.hitbox.setStyle({
+        color: route.color,
+        weight: isActive ? 22 : 18,
+        opacity: 0,
+        interactive: !isAddingRoute,
+      });
+      layer.hitbox.off('click');
+      layer.hitbox.on('click', event => {
+        L.DomEvent.stopPropagation(event);
+        if (!isAddingRoute) onRouteSelect(route);
+      });
 
-      if (isActive) layer.polyline.bringToFront();
+      if (isActive) {
+        layer.polyline.bringToFront();
+        layer.hitbox.bringToFront();
+      }
 
       if (isActive && safePath.length > 1) {
         const step = Math.max(5, Math.floor(safePath.length / 10));
@@ -236,12 +336,12 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
       if (activeLayer) {
         const bounds = activeLayer.polyline.getBounds();
         if (bounds.isValid()) {
-          map.fitBounds(bounds, { padding: [50, 50], animate: true, maxZoom: MAX_AUTO_FIT_ZOOM });
+          map.fitBounds(bounds, getRouteFitOptions());
         }
       }
     }
     previousActiveRouteIdRef.current = activeRouteId;
-  }, [routes, activeRoute]);
+  }, [routes, activeRoute, isAddingRoute, onRouteSelect]);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -271,12 +371,15 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
   }, [newRoutePath, newRouteWaypoints, onWaypointUpdate]);
 
   return (
-    <div className="h-full w-full relative">
-      <div id="map-container" className="h-full w-full" />
+    <div className="h-full w-full relative overflow-hidden bg-slate-100">
+      <div
+        id="map-container"
+        className="h-full w-full"
+      />
       
       {/* Zoom warning message */}
       {showZoomWarning && isAddingRoute && (
-        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[3000] bg-amber-100 border-2 border-amber-400 text-amber-900 px-4 py-3 rounded-lg font-bold text-sm shadow-lg animate-in fade-in duration-200">
+        <div className="fixed top-1/2 left-4 right-4 md:left-1/2 md:right-auto md:min-w-72 md:-translate-x-1/2 transform -translate-y-1/2 z-[3000] bg-amber-100 border-2 border-amber-400 text-amber-900 px-4 py-3 rounded-lg font-bold text-sm text-center shadow-lg animate-in fade-in duration-200">
           Zoom in to add waypoints
         </div>
       )}

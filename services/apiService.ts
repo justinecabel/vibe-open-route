@@ -3,6 +3,7 @@ import { ENV } from '../env';
 
 const API_BASE = ENV.BACKEND_API;
 const LOCAL_CACHE_KEY = 'open_route_store_v2';
+let memoryRoutes: JeepneyRoute[] = [];
 
 // Connection status tracking with debounce
 let isBackendConnected = true; // Start as true to avoid false offline on initial load
@@ -24,6 +25,7 @@ const getHeaders = (extraHeaders: Record<string, string> = {}) => {
 };
 
 const getLocalData = (): JeepneyRoute[] => {
+  if (typeof localStorage === 'undefined') return memoryRoutes;
   try {
     const data = localStorage.getItem(LOCAL_CACHE_KEY);
     return data ? JSON.parse(data) : [];
@@ -33,7 +35,16 @@ const getLocalData = (): JeepneyRoute[] => {
 };
 
 const saveLocalData = (routes: JeepneyRoute[]) => {
+  memoryRoutes = routes;
+  if (typeof localStorage === 'undefined') return;
   localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(routes));
+};
+
+const getTimeoutSignal = (timeoutMs: number) => {
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+    return AbortSignal.timeout(timeoutMs);
+  }
+  return undefined;
 };
 
 const toTimestamp = (value: unknown, fallback: number): number => {
@@ -78,7 +89,7 @@ const checkBackendConnection = async (): Promise<boolean> => {
       headers: getHeaders(),
       mode: 'cors',
       cache: 'no-cache',
-      signal: AbortSignal.timeout(3000) // 3 second timeout
+      signal: getTimeoutSignal(3000)
     });
     const connected = res.ok;
     

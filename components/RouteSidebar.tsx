@@ -1,11 +1,19 @@
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { JeepneyRoute } from '../types';
 
 interface RouteSidebarProps {
   routes: JeepneyRoute[];
   totalRoutesCount: number;
   activeRoute: JeepneyRoute | null;
+  locationStatus: 'checking' | 'granted' | 'denied' | 'unsupported';
+  isShowingNearbyRoutes: boolean;
+  searchQuery: string;
+  searchStatus: 'idle' | 'searching' | 'found' | 'empty' | 'error';
+  searchLabel: string | null;
+  isPlaceSearchActive: boolean;
+  onRequestLocation: () => void;
+  onSearchQueryChange: (query: string) => void;
   onSelectRoute: (route: JeepneyRoute) => void;
   onAddRouteClick: () => void;
   isAddingRoute: boolean;
@@ -21,105 +29,233 @@ const JeepneyIcon = (props: { className?: string }) => (
   </svg>
 );
 
+const SearchPlaceIcon = (props: { className?: string }) => (
+  <svg className={props.className || "w-4 h-4"} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <circle cx="10.5" cy="10.5" r="5.5" strokeWidth="2.4" />
+    <path strokeLinecap="round" strokeWidth="2.4" d="m15 15 4.5 4.5" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.1" d="M10.5 7.75v5.5M7.75 10.5h5.5" />
+  </svg>
+);
+
+const ClearIcon = (props: { className?: string }) => (
+  <svg className={props.className || "w-4 h-4"} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.7" d="M7 7l10 10M17 7 7 17" />
+  </svg>
+);
+
+const MIN_SHEET_HEIGHT = 32;
+const DEFAULT_SHEET_HEIGHT = 58;
+const MAX_SHEET_HEIGHT = 92;
+const CLOSE_SHEET_THRESHOLD = 40;
+
+const clampSheetHeight = (value: number) =>
+  Math.min(MAX_SHEET_HEIGHT, Math.max(MIN_SHEET_HEIGHT, Math.round(value)));
+
 const RouteSidebar: React.FC<RouteSidebarProps> = ({ 
-  routes, activeRoute, onSelectRoute, onAddRouteClick, 
+  routes, totalRoutesCount, activeRoute, locationStatus, isShowingNearbyRoutes, searchQuery, searchStatus, searchLabel, isPlaceSearchActive, onRequestLocation, onSearchQueryChange, onSelectRoute, onAddRouteClick, 
   isOpen, onToggle, onClearFilter, isFiltered, isAddingRoute
 }) => {
-  const [query, setQuery] = useState('');
+  const [sheetHeight, setSheetHeight] = useState(DEFAULT_SHEET_HEIGHT);
+  const draggedSheetHeightRef = useRef(DEFAULT_SHEET_HEIGHT);
 
-  const filtered = routes.filter(r => 
-    r.name.toLowerCase().includes(query.toLowerCase()) ||
-    r.author.toLowerCase().includes(query.toLowerCase())
-  );
+  const getSheetHeightFromPointer = (clientY: number) => {
+    if (typeof window === 'undefined') return sheetHeight;
+    const nextHeight = ((window.innerHeight - clientY) / window.innerHeight) * 100;
+    return clampSheetHeight(nextHeight);
+  };
+
+  const updateSheetHeightFromPointer = (clientY: number) => {
+    const nextHeight = getSheetHeightFromPointer(clientY);
+    draggedSheetHeightRef.current = nextHeight;
+    setSheetHeight(nextHeight);
+    return nextHeight;
+  };
+
+  const settleSheetHeight = (clientY?: number) => {
+    const nextHeight = typeof clientY === 'number'
+      ? getSheetHeightFromPointer(clientY)
+      : draggedSheetHeightRef.current;
+
+    if (nextHeight <= CLOSE_SHEET_THRESHOLD) {
+      setSheetHeight(DEFAULT_SHEET_HEIGHT);
+      onToggle();
+      return;
+    }
+
+    setSheetHeight(Math.max(nextHeight, DEFAULT_SHEET_HEIGHT));
+  };
 
   return (
     <>
-      {/* QA FIX: Hide menu button when a route is active to prevent overlap with 'X' button */}
-      {!isAddingRoute && !activeRoute && (
-        <button 
-          onClick={onToggle}
-          className={`lg:hidden fixed top-3 right-3 z-[2001] bg-indigo-950 text-white p-3 rounded-2xl shadow-2xl active:scale-90 transition-all ${
-            isOpen ? 'bg-rose-600' : ''
-          }`}
-          aria-label="Toggle menu"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d={isOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />
-          </svg>
-        </button>
+      {isOpen && !isAddingRoute && (
+        <div
+          className="lg:hidden fixed inset-0 z-[1900] bg-[radial-gradient(circle_at_50%_15%,rgba(255,255,255,0.2),rgba(15,23,42,0.26)_48%,rgba(15,23,42,0.38))] backdrop-blur-[3px] touch-none"
+          aria-hidden="true"
+        />
       )}
 
-      <aside className={`fixed lg:static inset-y-0 left-0 w-72 bg-white border-r flex flex-col z-[2000] sidebar-transition shadow-2xl lg:shadow-none ${
-        isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-      } max-h-dvh overflow-hidden`}>
-        <header className="p-4 bg-indigo-950 text-white">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-yellow-400 rounded-lg flex items-center justify-center text-indigo-950 shadow-md">
-              <JeepneyIcon className="w-5 h-5" />
+      <aside className={`fixed lg:static left-0 right-0 bottom-0 lg:inset-y-0 lg:right-auto lg:w-80 bg-white border-t lg:border-t-0 lg:border-r border-slate-200 flex flex-col z-[2000] sidebar-transition shadow-2xl lg:shadow-none ${
+        isOpen ? 'translate-y-0 lg:translate-x-0' : 'translate-y-full lg:translate-y-0 lg:translate-x-0'
+      } h-[var(--route-sheet-height)] lg:h-auto lg:max-h-dvh rounded-t-lg lg:rounded-none overflow-hidden pb-[env(safe-area-inset-bottom)] lg:pb-0`}
+        style={{ '--route-sheet-height': `${sheetHeight}dvh` } as React.CSSProperties}
+      >
+        <div className="lg:hidden px-4 pt-2 pb-1">
+          <div
+            role="slider"
+            tabIndex={0}
+            aria-label="Route search sheet height"
+            aria-valuemin={MIN_SHEET_HEIGHT}
+            aria-valuemax={MAX_SHEET_HEIGHT}
+            aria-valuenow={sheetHeight}
+            className="mx-auto h-8 w-36 rounded-full flex items-center justify-center touch-none cursor-ns-resize select-none outline-none"
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              updateSheetHeightFromPointer(event.clientY);
+            }}
+            onPointerMove={(event) => {
+              if (event.buttons !== 1) return;
+              updateSheetHeightFromPointer(event.clientY);
+            }}
+            onPointerUp={(event) => settleSheetHeight(event.clientY)}
+            onPointerCancel={() => settleSheetHeight()}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                setSheetHeight(value => clampSheetHeight(value + 6));
+              }
+              if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                setSheetHeight(value => {
+                  const nextHeight = clampSheetHeight(value - 6);
+                  if (nextHeight <= CLOSE_SHEET_THRESHOLD) {
+                    onToggle();
+                    return DEFAULT_SHEET_HEIGHT;
+                  }
+                  return nextHeight;
+                });
+              }
+            }}
+          >
+            <span className="h-1.5 w-20 rounded-full bg-slate-300 shadow-inner" />
+          </div>
+        </div>
+
+        <header className="p-4 bg-white text-slate-950 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 bg-slate-950 rounded-lg flex items-center justify-center text-amber-300 shadow-md flex-shrink-0">
+              <JeepneyIcon className="w-6 h-6" />
             </div>
-            <div>
-              <h1 className="text-lg font-black italic tracking-tighter uppercase leading-none">Open Route</h1>
-              <p className="text-[8px] font-bold text-yellow-400 uppercase tracking-widest mt-1">Philippine Transit Hub</p>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl font-black leading-none truncate">Open Route</h1>
+              <p className="text-xs font-bold text-slate-500 mt-1">{totalRoutesCount} community routes</p>
             </div>
           </div>
         </header>
 
-        <section className="p-3 space-y-3 bg-slate-100 border-b">
+        <section className="p-4 space-y-3 bg-white border-b border-slate-100">
           <div className="relative">
             <input 
-              placeholder="Search routes (e.g. Faura)"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-indigo-950 outline-none focus:border-indigo-600 transition-all shadow-sm"
+              placeholder="Search landmark or building"
+              value={searchQuery}
+              onChange={e => onSearchQueryChange(e.target.value)}
+              onFocus={() => setSheetHeight(Math.max(sheetHeight, 78))}
+              className="w-full min-h-12 pl-11 pr-4 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-950 outline-none focus:border-slate-950 transition-all"
             />
-            <svg className="w-3.5 h-3.5 absolute left-3 top-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <SearchPlaceIcon className="w-4 h-4 absolute left-4 top-4 text-slate-400" />
           </div>
 
           {isFiltered && (
-            <div className="bg-indigo-50 border border-indigo-100 p-2 rounded-lg flex items-center justify-between">
-              <span className="text-[10px] font-bold text-indigo-900">{filtered.length} near location</span>
+            <div className="bg-amber-50 border border-amber-200 p-2.5 rounded-lg flex items-center justify-between gap-2">
+              <span className="text-xs font-black text-slate-800">{routes.length} near selected point</span>
               <button 
                 onClick={onClearFilter} 
-                className="bg-indigo-600 text-white p-1 rounded-md shadow-sm active:scale-95"
+                className="h-9 w-9 bg-slate-950 text-white rounded-lg shadow-sm active:scale-95 flex items-center justify-center flex-shrink-0"
                 title="Clear filter"
               >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
+                <ClearIcon className="w-4 h-4" />
               </button>
             </div>
           )}
         </section>
 
-        <nav className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-hide pb-20 lg:pb-2">
-          <h2 className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1">Available Routes</h2>
-          {filtered.map(route => (
+        <nav className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide pb-16 lg:pb-4">
+          <div className="ml-1 mb-2">
+            <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-wider">
+              {isPlaceSearchActive ? 'Connecting Routes' : 'Nearby Routes'}
+            </h2>
+            {isPlaceSearchActive && (
+              <div className="mt-2 rounded-lg border border-sky-100 bg-sky-50 px-3 py-2">
+                <p className="text-[11px] font-bold text-sky-900">
+                  {searchStatus === 'searching'
+                    ? 'Finding that place...'
+                    : searchStatus === 'found'
+                      ? `Routes near ${searchLabel || 'searched place'}`
+                      : searchStatus === 'empty'
+                        ? 'No place found. Try a more specific landmark.'
+                        : searchStatus === 'error'
+                          ? 'Place search is unavailable right now.'
+                          : 'Search a landmark to find connecting routes.'}
+                </p>
+              </div>
+            )}
+            {!isShowingNearbyRoutes && !isPlaceSearchActive && (
+              <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                <p className="text-[11px] font-bold text-amber-800">
+                  {locationStatus === 'checking'
+                    ? 'Checking location to find routes near you.'
+                    : locationStatus === 'unsupported'
+                      ? 'Location must be supported to show nearby routes.'
+                      : 'Location must be enabled to show nearby routes.'}
+                </p>
+                {locationStatus !== 'unsupported' && (
+                  <button
+                    type="button"
+                    onClick={onRequestLocation}
+                    className="h-8 px-3 rounded-md bg-slate-950 text-white text-[10px] font-black uppercase tracking-wider active:scale-95 flex-shrink-0"
+                  >
+                    Enable
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+          {routes.map(route => (
             <div 
               key={route.id}
               onClick={() => onSelectRoute(route)}
-              className={`group p-3 bg-white rounded-xl border transition-all cursor-pointer hover:shadow-md active:scale-95 ${
-                activeRoute?.id === route.id ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100'
+              className={`group p-3.5 bg-white rounded-lg border transition-all cursor-pointer hover:shadow-md active:scale-[0.98] ${
+                activeRoute?.id === route.id ? 'border-slate-950 bg-slate-50' : 'border-slate-200'
               }`}
             >
-              <div className="flex justify-between items-start">
-                <h3 className="font-placard text-indigo-950 text-xs uppercase italic truncate pr-2">{route.name}</h3>
-                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ml-auto flex-shrink-0 ${route.score >= 0 ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'}`}>
+              <div className="flex justify-between items-start gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-black text-slate-950 truncate pr-1">{route.name}</h3>
+                  <p className="text-xs text-slate-500 font-semibold mt-1 truncate">By {route.author}</p>
+                </div>
+                <span className={`text-xs font-black px-2 py-1 rounded-full ml-auto flex-shrink-0 ${route.score >= 0 ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50'}`}>
                   {route.score > 0 ? `+${route.score}` : route.score}
                 </span>
               </div>
-              <p className="text-[9px] text-slate-400 font-bold italic mt-1">Contributor: {route.author}</p>
             </div>
           ))}
-          {filtered.length === 0 && (
-            <div className="text-center py-12 text-[10px] text-slate-400 font-bold uppercase tracking-widest">No routes found</div>
+          {routes.length === 0 && (
+            <div className="text-center py-12 text-xs text-slate-400 font-bold uppercase tracking-wider">
+              {isPlaceSearchActive
+                ? searchStatus === 'searching'
+                  ? 'Searching places...'
+                  : 'No connecting routes found'
+                : isShowingNearbyRoutes ? 'No nearby routes found' : 'Enable location to show routes'}
+            </div>
           )}
         </nav>
 
-        <footer className="sticky bottom-0 p-3 border-t bg-white shadow-2xl z-10">
+        <footer className="sticky bottom-0 px-4 py-2 border-t border-slate-100 bg-white/95 backdrop-blur shadow-lg z-10">
           <button 
             onClick={onAddRouteClick} 
-            className="w-full bg-indigo-950 text-white font-black py-3 rounded-xl text-[9px] uppercase tracking-widest shadow-lg hover:bg-black transition-all flex items-center justify-center gap-2"
+            className="w-full min-h-11 bg-amber-300 text-slate-950 font-black rounded-lg text-[11px] uppercase tracking-wider shadow-sm hover:bg-amber-200 transition-all flex items-center justify-center gap-2 active:scale-[0.99]"
           >
             <JeepneyIcon className="w-3.5 h-3.5" />
-            + Contribute Route
+            Contribute Route
           </button>
         </footer>
       </aside>
