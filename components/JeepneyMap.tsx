@@ -161,58 +161,6 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
     const mapPane = map?.getPane('mapPane');
     if (!map || !mapPane) return;
 
-    const applyMapRotation = () => {
-      const baseTransform = mapPane.style.transform.replace(/\s*rotate\([^)]*\)/, '').trim();
-      mapPane.style.transformOrigin = '50% 50%';
-      mapPane.style.transform = `${baseTransform} rotate(${manualRotationRef.current}deg)`.trim();
-    };
-
-    applyRotationRef.current = applyMapRotation;
-    applyMapRotation();
-    map.on('move zoom zoomanim moveend zoomend', applyMapRotation);
-
-    const container = map.getContainer();
-    let touchStartAngle: number | null = null;
-    let touchStartRotation = 0;
-    const angleBetweenTouches = (touches: TouchList) => {
-      if (touches.length < 2) return null;
-      const t1 = touches[0];
-      const t2 = touches[1];
-      return Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * (180 / Math.PI);
-    };
-
-    const onTouchStart = (event: TouchEvent) => {
-      if (event.touches.length < 2) return;
-      const nextAngle = angleBetweenTouches(event.touches);
-      if (nextAngle === null) return;
-      touchStartAngle = nextAngle;
-      touchStartRotation = manualRotationRef.current;
-    };
-
-    const onTouchMove = (event: TouchEvent) => {
-      if (event.touches.length < 2 || touchStartAngle === null) return;
-      const nextAngle = angleBetweenTouches(event.touches);
-      if (nextAngle === null) return;
-      event.preventDefault();
-      manualRotationRef.current = touchStartRotation + (nextAngle - touchStartAngle);
-      applyMapRotation();
-    };
-
-    const onTouchEnd = () => {
-      if (touchStartAngle === null) return;
-      touchStartAngle = null;
-    };
-
-    container.addEventListener('touchstart', onTouchStart, { passive: true });
-    container.addEventListener('touchmove', onTouchMove, { passive: false });
-    container.addEventListener('touchend', onTouchEnd, { passive: true });
-    container.addEventListener('touchcancel', onTouchEnd, { passive: true });
-    return () => {
-      map.off('move zoom zoomanim moveend zoomend', applyMapRotation);
-      container.removeEventListener('touchstart', onTouchStart);
-      container.removeEventListener('touchmove', onTouchMove);
-      container.removeEventListener('touchend', onTouchEnd);
-      container.removeEventListener('touchcancel', onTouchEnd);
     const scheduleRotation = () => {
       if (rotationRafRef.current !== null) {
         cancelAnimationFrame(rotationRafRef.current);
@@ -247,6 +195,8 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
   useEffect(() => {
     applyRotationRef.current?.();
   }, [routes, activeRoute, isAddingRoute, isPointPickerActive]);
+
+  useEffect(() => {
     headingRef.current = heading;
     isHeadingModeRef.current = isHeadingMode;
     applyRotationRef.current?.();
@@ -332,7 +282,6 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
     userMarkerElementRef.current.style.setProperty('--heading-deg', `${heading}deg`);
     userMarkerElementRef.current.style.setProperty('--heading-opacity', isHeadingMode ? '1' : '0');
   }, [heading, isHeadingMode]);
-  }, [activeRoute, focusedPoint, isHeadingMode, userLocation]);
 
   useEffect(() => {
     if (!mapRef.current || !userLocation || centerOnUserLocationRequest === 0) return;
