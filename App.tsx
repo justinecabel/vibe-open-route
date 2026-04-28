@@ -842,7 +842,7 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {!isAddingRoute && !activeRoute && (
+        {!isAddingRoute && !activeRoute && !isPointPickerActive && (
           <div className={`fixed left-4 lg:left-[calc(20rem+1rem)] bottom-[calc(env(safe-area-inset-bottom)+2.75rem)] z-[1200] h-11 rounded-full bg-white/90 text-slate-950 shadow-[0_10px_28px_rgba(15,23,42,0.16)] border border-white/80 backdrop-blur-md p-1 items-center gap-1 ${
             isSidebarOpen ? 'hidden lg:flex' : 'flex'
           }`}>
