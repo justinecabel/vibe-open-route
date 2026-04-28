@@ -60,8 +60,11 @@ Update this before deployment.
 ## Scripts
 
 - `npm run dev`: start development server
+- `npm start`: serve production build locally
 - `npm run build`: production build
 - `npm run preview`: preview production build locally
+- `npm run typecheck`: run TypeScript checks
+- `npm test`: placeholder test command (no automated tests configured yet)
 
 ## Crawlability and SEO
 

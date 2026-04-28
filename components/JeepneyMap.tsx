@@ -448,7 +448,9 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
     const activeRouteId = activeRoute?.id ?? null;
     const nextRouteIds = new Set(routes.map(route => route.id));
 
-    Object.entries(routeLayersRef.current).forEach(([routeId, layer]) => {
+    (Object.entries(routeLayersRef.current) as Array<
+      [string, { group: L.LayerGroup; polyline: L.Polyline; hitbox: L.Polyline }]
+    >).forEach(([routeId, layer]) => {
       if (!nextRouteIds.has(routeId)) {
         layer.group.remove();
         delete routeLayersRef.current[routeId];
