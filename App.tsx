@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import JeepneyMap from './components/JeepneyMap';
 import RouteSidebar from './components/RouteSidebar';
 import { JeepneyRoute, Waypoint, GeminiAnalysis } from './types';
@@ -13,6 +13,9 @@ const CONNECTING_ROUTE_RADIUS_M = 900;
 const ROUTE_HOP_DISTANCE_M = 420;
 const MAX_HOP_BOARDING_DISTANCE_M = 700;
 const MAX_HOP_TRANSFER_DISTANCE_M = 700;
+const HEADING_UPDATE_INTERVAL_MS = 80;
+const HEADING_JITTER_THRESHOLD_DEG = 1.5;
+const HEADING_SMOOTHING_FACTOR = 0.28;
 
 type ThemeMode = 'auto' | 'light' | 'dark';
 type SearchStatus = 'idle' | 'searching' | 'found' | 'empty' | 'error';
@@ -213,6 +216,7 @@ const App: React.FC = () => {
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [nowTick, setNowTick] = useState(Date.now());
   const connectionTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastHeadingUpdateRef = useRef(0);
   
   const [votedIds, setVotedIds] = useState<Record<string, number>>(() => {
     try {
@@ -390,7 +394,16 @@ const App: React.FC = () => {
             : null;
 
       if (nextHeading === null || !Number.isFinite(nextHeading)) return;
-      setHeading((nextHeading + 360) % 360);
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (now - lastHeadingUpdateRef.current < HEADING_UPDATE_INTERVAL_MS) return;
+      lastHeadingUpdateRef.current = now;
+
+      const normalizedHeading = (nextHeading + 360) % 360;
+      setHeading(prev => {
+        const shortestDelta = ((((normalizedHeading - prev) + 540) % 360) - 180);
+        if (Math.abs(shortestDelta) < HEADING_JITTER_THRESHOLD_DEG) return prev;
+        return (prev + shortestDelta * HEADING_SMOOTHING_FACTOR + 360) % 360;
+      });
       setHeadingStatus('active');
     };
 
@@ -829,7 +842,7 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {!isAddingRoute && !activeRoute && (
+        {!isAddingRoute && !activeRoute && !isPointPickerActive && (
           <div className={`fixed left-4 lg:left-[calc(20rem+1rem)] bottom-[calc(env(safe-area-inset-bottom)+2.75rem)] z-[1200] h-11 rounded-full bg-white/90 text-slate-950 shadow-[0_10px_28px_rgba(15,23,42,0.16)] border border-white/80 backdrop-blur-md p-1 items-center gap-1 ${
             isSidebarOpen ? 'hidden lg:flex' : 'flex'
           }`}>

@@ -72,9 +72,41 @@
     .sidebar-transition { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
     
     /* GPS Marker Animation */
+    .user-location-wrap {
+      --heading-deg: 0deg;
+      --heading-opacity: 0;
+      width: 56px;
+      height: 56px;
+      position: relative;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+    }
+    .user-location-heading {
+      position: absolute;
+      width: 56px;
+      height: 56px;
+      border-radius: 999px;
+      background: conic-gradient(
+        from calc(var(--heading-deg) - 26deg),
+        rgba(59, 130, 246, 0.00) 0deg,
+        rgba(59, 130, 246, 0.40) 26deg,
+        rgba(59, 130, 246, 0.72) 40deg,
+        rgba(59, 130, 246, 0.40) 54deg,
+        rgba(59, 130, 246, 0.00) 80deg
+      );
+      opacity: var(--heading-opacity);
+      transition: opacity 160ms ease;
+      filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.38));
+    }
     .user-location-dot {
-      width: 14px; height: 14px; background: #3b82f6; border: 2px solid white; border-radius: 50%;
-      box-shadow: 0 0 15px rgba(59, 130, 246, 0.6); position: relative;
+      width: 14px;
+      height: 14px;
+      background: #3b82f6;
+      border: 2px solid white;
+      border-radius: 50%;
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.6);
+      position: relative;
     }
     .user-location-dot::after {
       content: ''; position: absolute; inset: -4px; border-radius: 50%;
@@ -108,12 +140,12 @@
     .route-transfer-drop { background: #f97316; color: white; }
     .route-center-picker {
       position: relative;
-      width: 46px;
-      height: 46px;
+      width: 36px;
+      height: 36px;
       border-radius: 999px;
-      border: 2px solid rgba(2, 6, 23, 0.9);
-      background: rgba(255, 255, 255, 0.86);
-      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+      border: 2.5px solid rgba(2, 6, 23, 0.88);
+      background: transparent;
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
     }
     .route-center-picker::before,
     .route-center-picker::after {
@@ -125,18 +157,18 @@
       top: 50%;
       transform: translate(-50%, -50%);
     }
-    .route-center-picker::before { width: 28px; height: 2px; }
-    .route-center-picker::after { width: 2px; height: 28px; }
+    .route-center-picker::before { width: 22px; height: 2px; }
+    .route-center-picker::after { width: 2px; height: 22px; }
     .route-center-picker-dot {
       position: absolute;
       left: 50%;
       top: 50%;
-      width: 8px;
-      height: 8px;
+      width: 6px;
+      height: 6px;
       transform: translate(-50%, -50%);
       border-radius: 999px;
       background: #f97316;
-      border: 2px solid white;
+      border: 1.5px solid rgba(255, 255, 255, 0.95);
       z-index: 1;
     }
     @keyframes ping { 75%, 100% { transform: scale(2.5); opacity: 0; } }
