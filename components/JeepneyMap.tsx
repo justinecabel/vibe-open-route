@@ -98,6 +98,10 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
   const userMarkerRef = useRef<L.Marker | null>(null);
   const zoomWarningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previousActiveRouteIdRef = useRef<string | null>(null);
+  const headingRef = useRef(heading);
+  const isHeadingModeRef = useRef(isHeadingMode);
+  const applyRotationRef = useRef<(() => void) | null>(null);
+  const rotationRafRef = useRef<number | null>(null);
   const [showZoomWarning, setShowZoomWarning] = useState(false);
 
   useEffect(() => {
@@ -155,23 +159,41 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
     const mapPane = map?.getPane('mapPane');
     if (!map || !mapPane) return;
 
-    const applyRotation = () => {
-      const baseTransform = mapPane.style.transform.replace(/\s*rotate\([^)]*\)/, '');
-      mapPane.style.transformOrigin = '50% 50%';
-      mapPane.style.transform = isHeadingMode
-        ? `${baseTransform} rotate(${-heading}deg)`
-        : baseTransform;
+    const scheduleRotation = () => {
+      if (rotationRafRef.current !== null) {
+        cancelAnimationFrame(rotationRafRef.current);
+      }
+      rotationRafRef.current = requestAnimationFrame(() => {
+        rotationRafRef.current = null;
+        const baseTransform = mapPane.style.transform.replace(/\s*rotate\([^)]*\)/, '').trim();
+        mapPane.style.transformOrigin = '50% 50%';
+        mapPane.style.transform = isHeadingModeRef.current
+          ? `${baseTransform} rotate(${-headingRef.current}deg)`.trim()
+          : baseTransform;
+      });
     };
 
-    applyRotation();
-    map.on('move zoom zoomanim moveend zoomend', applyRotation);
+    applyRotationRef.current = scheduleRotation;
+    scheduleRotation();
+    map.on('move zoom zoomanim moveend zoomend', scheduleRotation);
     return () => {
-      map.off('move zoom zoomanim moveend zoomend', applyRotation);
+      map.off('move zoom zoomanim moveend zoomend', scheduleRotation);
+      if (rotationRafRef.current !== null) {
+        cancelAnimationFrame(rotationRafRef.current);
+        rotationRafRef.current = null;
+      }
+      applyRotationRef.current = null;
       const nextMapPane = map.getPane('mapPane');
       if (nextMapPane) {
         nextMapPane.style.transform = nextMapPane.style.transform.replace(/\s*rotate\([^)]*\)/, '');
       }
     };
+  }, []);
+
+  useEffect(() => {
+    headingRef.current = heading;
+    isHeadingModeRef.current = isHeadingMode;
+    applyRotationRef.current?.();
   }, [heading, isHeadingMode]);
 
   useEffect(() => {
@@ -235,10 +257,13 @@ const JeepneyMap: React.FC<JeepneyMapProps> = ({
     }).addTo(mapRef.current);
     
     // Auto-center on user location once if not already focused
-    if (!focusedPoint && !activeRoute) {
-       mapRef.current.setView([userLocation.lat, userLocation.lng], 15);
+    if (isHeadingMode) {
+      const targetZoom = Math.max(mapRef.current.getZoom(), 16);
+      mapRef.current.setView([userLocation.lat, userLocation.lng], targetZoom, { animate: false });
+    } else if (!focusedPoint && !activeRoute) {
+      mapRef.current.setView([userLocation.lat, userLocation.lng], 15);
     }
-  }, [userLocation]);
+  }, [activeRoute, focusedPoint, isHeadingMode, userLocation]);
 
   useEffect(() => {
     if (!mapRef.current || !userLocation || centerOnUserLocationRequest === 0) return;
